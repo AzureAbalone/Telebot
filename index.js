@@ -173,8 +173,17 @@ function processMessage(text) {
   content = removeBackticks(content).trim();
   if (!content) return null;
 
-  // Step 3: Separate by ','
-  const segments = content.split(",");
+  // Step 3: Normalize newlines to commas, then separate by ','
+  // Replace all newline characters with commas so multi-line input is handled correctly
+  var normalized = "";
+  for (var c = 0; c < content.length; c++) {
+    if (content[c] === "\n" || content[c] === "\r") {
+      normalized += ",";
+    } else {
+      normalized += content[c];
+    }
+  }
+  const segments = normalized.split(",");
 
   // Step 4: For each instance, split by ' ' → first item is key, rest are values
   //         Build object: { key: [values] }
