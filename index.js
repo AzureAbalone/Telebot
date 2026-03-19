@@ -384,33 +384,18 @@ bot.on("text", async (ctx) => {
     const forwardFrom =
       msg.forward_origin?.type === "user" ? msg.forward_origin.sender_user?.id :
         msg.forward_from?.id ?? null;
-    const forwardName = msg.forward_from
-      ? userLabel(msg.forward_from)
-      : (msg.forward_origin?.sender_user ? userLabel(msg.forward_origin.sender_user) : null);
 
     const isAllowed =
       ALLOWED_FORWARD_FROM.includes(senderId) ||
       (forwardFrom && ALLOWED_FORWARD_FROM.includes(forwardFrom));
 
-    log("📩 [Bot/DM]", `Incoming message from ${who}` +
-      (forwardFrom ? ` | forwarded from: ${forwardName || forwardFrom}` : "") +
-      ` | preview: ${preview(text)}`);
+    if (!isAllowed) return;
 
-    if (!isAllowed) {
-      log("⛔ [Bot/DM]", `REJECTED — user ${who} not in ALLOWED_FORWARD_FROM (forward: ${forwardFrom || "none"})`);
-      return;
-    }
-
-    log("✅ [Bot/DM]", `AUTHORIZED — processing message from ${who}`);
-
-    // For DMs: try with header first, then treat as raw data
     const result = processMessage(text);
     if (result) {
       const html = `<pre>${escapeHtml(result)}</pre>`;
       ctx.reply(html, { parse_mode: "HTML" });
       log("📤 [Bot/DM]", `Replied to ${who} | result: ${preview(result)}`);
-    } else {
-      log("⏭️  [Bot/DM]", `No header found in message from ${who} — skipped`);
     }
     return;
   }
@@ -418,19 +403,24 @@ bot.on("text", async (ctx) => {
   // ── Groups / Supergroups ──
   if (chatType === "group" || chatType === "supergroup") {
     const senderId = msg.from?.id;
-    const hasHeader = text.includes(HEADER_PATTERN);
-    log("📩 [Bot/Group]", `Message from ${who} in ${where} | has_header: ${hasHeader} | preview: ${preview(text)}`);
 
     // Only process messages from the target bot
-    if (senderId !== TARGET_BOT_ID) {
-      return;
-    }
+    if (senderId !== TARGET_BOT_ID) return;
+
+    // Only process messages with header
+    if (!text.includes(HEADER_PATTERN)) return;
+
+    log("📩 [Bot/Group]", `Header from bot ${senderId} in ${where} (chatId: ${ctx.chat.id}, type: ${chatType}) | preview: ${preview(text)}`);
 
     const result = processMessage(text);
     if (result) {
-      const html = `<pre>${escapeHtml(result)}</pre>`;
-      ctx.reply(html, { parse_mode: "HTML" });
-      log("📤 [Bot/Group]", `Replied in ${where} | triggered by: ${who} | result: ${preview(result)}`);
+      try {
+        const html = `<pre>${escapeHtml(result)}</pre>`;
+        await ctx.reply(html, { parse_mode: "HTML" });
+        log("📤 [Bot/Group]", `Replied in ${where} (chatId: ${ctx.chat.id}) | result: ${preview(result)}`);
+      } catch (err) {
+        logError("❌ [Bot/Group]", `Failed to reply in ${where} (chatId: ${ctx.chat.id}, type: ${chatType}):`, err.message);
+      }
     }
   }
 });
@@ -446,7 +436,7 @@ async function startUserbot() {
     useWSS: false,
   });
 
-  log("🔑 [Userbot]", "Logging in to Telegram user account...");
+  log("🔑 [Userbot]", "Logging in...");
   await client.start({
     phoneNumber: async () => await input.text("📱 Enter your phone number: "),
     password: async () => await input.text("🔒 Enter 2FA password (if any): "),
@@ -455,7 +445,7 @@ async function startUserbot() {
   });
 
   const savedSession = client.session.save();
-  log("✅ [Userbot]", "Logged in successfully!");
+  log("✅ [Userbot]", "Logged in!");
   log("🔑 [Userbot]", `SESSION_STRING=${savedSession}`);
 
   // Listen for new messages
@@ -468,33 +458,36 @@ async function startUserbot() {
       const chatId = message.chatId || message.peerId;
 
       if (senderId !== TARGET_BOT_ID.toString()) return;
-
-      // Only care about messages with the header
       if (!message.text.includes(HEADER_PATTERN)) return;
 
-      log("📩 [Userbot]", `Header message detected from bot ${TARGET_BOT_ID} in chat ${chatId} | preview: ${preview(message.text)}`);
+      log("📩 [Userbot]", `Header from bot ${TARGET_BOT_ID} | gramjs_chatId: ${chatId} (type: ${typeof chatId}) | preview: ${preview(message.text)}`);
 
       const result = processMessage(message.text);
       if (!result) return;
 
-      log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
-
       // Only reply in allowed chats from chat.txt
       const allowedChats = loadChatIds();
-      const botChatId = Number(chatId); // Convert BigInt from GramJS to Number for Bot API
-      if (!allowedChats.includes(chatId.toString()) && !allowedChats.includes(botChatId.toString())) {
-        log("⛔ [Userbot]", `REJECTED — chat ${chatId} (botId: ${botChatId}) not in chat.txt (allowed: [${allowedChats.join(", ")}])`);
+      const botChatId = Number(chatId);
+      const chatIdStr = chatId.toString();
+      const botChatIdStr = botChatId.toString();
+
+      log("🔍 [Userbot/Trace]", `chatId=${chatIdStr} | botChatId=${botChatIdStr} | chat.txt=[${allowedChats.join(", ")}] | match=${allowedChats.includes(chatIdStr) || allowedChats.includes(botChatIdStr)}`);
+
+      if (!allowedChats.includes(chatIdStr) && !allowedChats.includes(botChatIdStr)) {
+        log("⛔ [Userbot]", `chat ${chatIdStr} not in chat.txt — skipped`);
         return;
       }
       try {
         const html = `<pre>${escapeHtml(result)}</pre>`;
         await bot.telegram.sendMessage(botChatId, html, { parse_mode: "HTML" });
-        log("📤 [Bot via Userbot]", `✅ Delivered to chat ${botChatId} | result: ${preview(result)}`);
+        log("📤 [Userbot]", `✅ Delivered to ${botChatId} | result: ${preview(result)}`);
       } catch (e) {
-        logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
+        logError("❌ [Userbot/Send]", `Failed chatId=${chatIdStr} botChatId=${botChatIdStr}:`, e.message);
+        // Trace: try alternate ID formats
+        log("🔍 [Userbot/Trace]", `Original chatId type: ${typeof chatId} | value: ${chatId} | Number(): ${botChatId} | -100 prefix: -100${Math.abs(botChatId)}`);
       }
     } catch (err) {
-      logError("❌ [Userbot]", "Error handling message:", err.message, err.stack);
+      logError("❌ [Userbot]", "Error:", err.message, err.stack);
     }
   }, new NewMessage({ fromUsers: [TARGET_BOT_ID] }));
 
