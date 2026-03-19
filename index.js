@@ -8,6 +8,41 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 
+// ─── Logger ───────────────────────────────────────────────────────
+function vnTimestamp() {
+  const now = new Date();
+  return now.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
+}
+
+function log(tag, ...args) {
+  console.log(`[${vnTimestamp()}] ${tag}`, ...args);
+}
+
+function logError(tag, ...args) {
+  console.error(`[${vnTimestamp()}] ${tag}`, ...args);
+}
+
+function userLabel(from) {
+  if (!from) return "unknown";
+  const name = [from.first_name, from.last_name].filter(Boolean).join(" ") || "NoName";
+  const username = from.username ? `@${from.username}` : "no-username";
+  return `${name} (${username}, id:${from.id})`;
+}
+
+function chatLabel(chat) {
+  if (!chat) return "unknown-chat";
+  const title = chat.title || chat.username || chat.first_name || "DM";
+  return `"${title}" (type:${chat.type}, id:${chat.id})`;  
+}
+
+function preview(text, maxLen) {
+  maxLen = maxLen || 80;
+  if (!text) return "[empty]";
+  const oneLine = text.replace(/\n/g, "⏎").replace(/\r/g, "");
+  if (oneLine.length <= maxLen) return oneLine;
+  return oneLine.substring(0, maxLen) + "…";
+}
+
 // ─── Config ───────────────────────────────────────────────────────
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -42,14 +77,14 @@ const server = http.createServer((req, res) => {
 
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
-    console.log(`⚠️  Port ${PORT} already in use — health server skipped (bot still runs)`);
+    log("⚠️  [Health]", `Port ${PORT} already in use — health server skipped (bot still runs)`);
   } else {
-    console.error("❌ Health server error:", err);
+    logError("❌ [Health]", "Server error:", err);
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`🌐 Health server on port ${PORT}`);
+  log("🌐 [Health]", `Server listening on port ${PORT}`);
 });
 
 // ─── Load chat IDs from chat.txt ──────────────────────────────────
@@ -57,7 +92,7 @@ function loadChatIds() {
   try {
     if (!fs.existsSync(CHAT_FILE)) {
       fs.writeFileSync(CHAT_FILE, "# Add chat IDs here, one per line\n# Example: -5157920720\n");
-      console.log("📄 Created chat.txt — add your group chat IDs there.");
+      log("📄 [Config]", "Created chat.txt — add your group chat IDs there.");
       return [];
     }
     const content = fs.readFileSync(CHAT_FILE, "utf-8");
@@ -65,10 +100,10 @@ function loadChatIds() {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"));
-    console.log(`📄 Loaded ${ids.length} chat(s) from chat.txt:`, ids);
+    log("📄 [Config]", `Loaded ${ids.length} chat(s) from chat.txt:`, ids);
     return ids;
   } catch (err) {
-    console.error("❌ Error loading chat.txt:", err.message);
+    logError("❌ [Config]", "Error loading chat.txt:", err.message);
     return [];
   }
 }
@@ -278,20 +313,22 @@ function processMessage(text) {
 }
 
 // ─── Send to all chats in chat.txt ────────────────────────────────
-async function sendToAllChats(result) {
+async function sendToAllChats(result, sourceInfo) {
   const chatIds = loadChatIds();
   if (chatIds.length === 0) {
-    console.log("⚠️  No chats in chat.txt to send to.");
+    log("⚠️  [Broadcast]", "No chats in chat.txt to send to.");
     return;
   }
+
+  log("📡 [Broadcast]", `Sending to ${chatIds.length} chat(s) | source: ${sourceInfo || "unknown"} | content: ${preview(result)}`);
 
   for (const chatId of chatIds) {
     try {
       const html = `<pre>${escapeHtml(result)}</pre>`;
       await bot.telegram.sendMessage(chatId, html, { parse_mode: "HTML" });
-      console.log(`📤 Sent to chat ${chatId}`);
+      log("📤 [Broadcast]", `✅ Delivered to chat ${chatId}`);
     } catch (err) {
-      console.error(`❌ Failed to send to ${chatId}:`, err.message);
+      logError("❌ [Broadcast]", `Failed to send to ${chatId}:`, err.message);
     }
   }
 }
@@ -319,6 +356,8 @@ bot.on("text", async (ctx) => {
   const chatType = ctx.chat?.type;
   const msg = ctx.message;
   const text = msg.text || "";
+  const who = userLabel(msg.from);
+  const where = chatLabel(ctx.chat);
 
   // ── Private / DM ──
   if (chatType === "private") {
@@ -326,33 +365,47 @@ bot.on("text", async (ctx) => {
     const forwardFrom =
       msg.forward_origin?.type === "user" ? msg.forward_origin.sender_user?.id :
         msg.forward_from?.id ?? null;
+    const forwardName = msg.forward_from
+      ? userLabel(msg.forward_from)
+      : (msg.forward_origin?.sender_user ? userLabel(msg.forward_origin.sender_user) : null);
 
     const isAllowed =
       ALLOWED_FORWARD_FROM.includes(senderId) ||
       (forwardFrom && ALLOWED_FORWARD_FROM.includes(forwardFrom));
 
+    log("📩 [Bot/DM]", `Incoming message from ${who}` +
+      (forwardFrom ? ` | forwarded from: ${forwardName || forwardFrom}` : "") +
+      ` | preview: ${preview(text)}`);
+
     if (!isAllowed) {
-      console.log(`⛔ [Bot/DM] Rejected message from unauthorized user ${senderId} (forward: ${forwardFrom})`);
+      log("⛔ [Bot/DM]", `REJECTED — user ${who} not in ALLOWED_FORWARD_FROM (forward: ${forwardFrom || "none"})`);
       return;
     }
+
+    log("✅ [Bot/DM]", `AUTHORIZED — processing message from ${who}`);
 
     // For DMs: try with header first, then treat as raw data
     const result = processMessage(text);
     if (result) {
       const html = `<pre>${escapeHtml(result)}</pre>`;
       ctx.reply(html, { parse_mode: "HTML" });
-      console.log("📤 [Bot/DM] From", senderId, "→", result);
+      log("📤 [Bot/DM]", `Replied to ${who} | result: ${preview(result)}`);
+    } else {
+      log("⏭️  [Bot/DM]", `No header found in message from ${who} — skipped`);
     }
     return;
   }
 
   // ── Groups / Supergroups ──
   if (chatType === "group" || chatType === "supergroup") {
+    const hasHeader = text.includes(HEADER_PATTERN);
+    log("📩 [Bot/Group]", `Message from ${who} in ${where} | has_header: ${hasHeader} | preview: ${preview(text)}`);
+
     const result = processMessage(text);
     if (result) {
       const html = `<pre>${escapeHtml(result)}</pre>`;
       ctx.reply(html, { parse_mode: "HTML" });
-      console.log("📤 [Bot/Group] Sent modified message:", result);
+      log("📤 [Bot/Group]", `Replied in ${where} | triggered by: ${who} | result: ${preview(result)}`);
     }
   }
 });
@@ -368,17 +421,17 @@ async function startUserbot() {
     useWSS: false,
   });
 
-  console.log("🔑 Logging in to Telegram user account...");
+  log("🔑 [Userbot]", "Logging in to Telegram user account...");
   await client.start({
     phoneNumber: async () => await input.text("📱 Enter your phone number: "),
     password: async () => await input.text("🔒 Enter 2FA password (if any): "),
     phoneCode: async () => await input.text("📟 Enter the code you received: "),
-    onError: (err) => console.error("❌ Login error:", err),
+    onError: (err) => logError("❌ [Userbot]", "Login error:", err),
   });
 
   const savedSession = client.session.save();
-  console.log("\n✅ Logged in successfully!");
-  console.log(`SESSION_STRING=${savedSession}\n`);
+  log("✅ [Userbot]", "Logged in successfully!");
+  log("🔑 [Userbot]", `SESSION_STRING=${savedSession}`);
 
   // Listen for new messages
   client.addEventHandler(async (event) => {
@@ -387,35 +440,38 @@ async function startUserbot() {
       if (!message || !message.text) return;
 
       const senderId = message.senderId?.toString();
+      const chatId = message.chatId || message.peerId;
+
       if (senderId !== TARGET_BOT_ID.toString()) return;
 
       // Only care about messages with the header
       if (!message.text.includes(HEADER_PATTERN)) return;
 
-      console.log(`📩 [Userbot] Detected header message, processing...`);
+      log("📩 [Userbot]", `Header message detected from bot ${TARGET_BOT_ID} in chat ${chatId} | preview: ${preview(message.text)}`);
 
       const result = processMessage(message.text);
       if (!result) return;
 
+      log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
+
       // Only reply in allowed chats from chat.txt
-      const chatId = message.chatId || message.peerId;
       const allowedChats = loadChatIds();
       if (!allowedChats.includes(chatId.toString())) {
-        console.log(`⛔ [Userbot] Rejected — chat ${chatId} not in chat.txt`);
+        log("⛔ [Userbot]", `REJECTED — chat ${chatId} not in chat.txt (allowed: [${allowedChats.join(", ")}])`);
         return;
       }
       try {
         await bot.telegram.sendMessage(chatId.toString(), `<pre>${escapeHtml(result)}</pre>`, { parse_mode: "HTML" });
-        console.log(`📤 [Userbot] Replied in chat ${chatId}`);
+        log("📤 [Userbot]", `✅ Delivered to chat ${chatId} | result: ${preview(result)}`);
       } catch (e) {
-        console.error(`❌ [Userbot] Failed to reply in chat ${chatId}:`, e.message);
+        logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
       }
     } catch (err) {
-      console.error("❌ [Userbot] Error handling message:", err.message);
+      logError("❌ [Userbot]", "Error handling message:", err.message, err.stack);
     }
   }, new NewMessage({ fromUsers: [TARGET_BOT_ID] }));
 
-  console.log("👁️  Userbot is monitoring for messages from bot", TARGET_BOT_ID);
+  log("👁️  [Userbot]", `Monitoring for messages from bot ${TARGET_BOT_ID}`);
 
   // Keep-alive: ping Telegram periodically to prevent TIMEOUT
   setInterval(async () => {
@@ -423,17 +479,17 @@ async function startUserbot() {
       if (client.connected) {
         await client.invoke(new (require("telegram/tl").Api.Ping)({ pingId: BigInt(Math.floor(Math.random() * 1e15)) }));
       } else {
-        console.log("🔄 Reconnecting userbot...");
+        log("🔄 [Userbot]", "Reconnecting...");
         await client.connect();
-        console.log("✅ Reconnected!");
+        log("✅ [Userbot]", "Reconnected!");
       }
     } catch (err) {
-      console.error("⚠️  Keep-alive/reconnect error:", err.message);
+      logError("⚠️  [Userbot]", "Keep-alive/reconnect error:", err.message);
       try {
         await client.connect();
-        console.log("✅ Reconnected after keep-alive failure!");
+        log("✅ [Userbot]", "Reconnected after keep-alive failure!");
       } catch (reconnectErr) {
-        console.error("❌ Reconnect failed:", reconnectErr.message);
+        logError("❌ [Userbot]", "Reconnect failed:", reconnectErr.message);
       }
     }
   }, 60000); // ping every 60 seconds
@@ -444,17 +500,19 @@ async function main() {
   loadChatIds();
 
   bot.launch();
-  console.log("🤖 Telegraf bot is running...");
+  log("🤖 [Boot]", "Telegraf bot is running...");
+  log("📋 [Boot]", `ALLOWED_FORWARD_FROM: [${ALLOWED_FORWARD_FROM.join(", ")}]`);
+  log("📋 [Boot]", `TARGET_BOT_ID: ${TARGET_BOT_ID}`);
 
   if (API_ID && API_HASH) {
     try {
       await startUserbot();
     } catch (err) {
-      console.error("❌ Userbot failed to start:", err.message);
-      console.log("⚠️  Bot will still work for forwarded/pasted messages.");
+      logError("❌ [Boot]", "Userbot failed to start:", err.message);
+      log("⚠️  [Boot]", "Bot will still work for forwarded/pasted messages.");
     }
   } else {
-    console.log("⚠️  No API_ID/API_HASH in .env — userbot disabled.");
+    log("⚠️  [Boot]", "No API_ID/API_HASH in .env — userbot disabled.");
   }
 }
 
@@ -465,8 +523,8 @@ process.once("SIGTERM", () => { bot.stop("SIGTERM"); process.exit(0); });
 
 // Catch uncaught errors to prevent crashes
 process.on("uncaughtException", (err) => {
-  console.error("⚠️  Uncaught exception:", err.message);
+  logError("⚠️  [CRASH]", "Uncaught exception:", err.message, err.stack);
 });
 process.on("unhandledRejection", (err) => {
-  console.error("⚠️  Unhandled rejection:", err.message || err);
+  logError("⚠️  [CRASH]", "Unhandled rejection:", err.message || err);
 });
