@@ -84,7 +84,7 @@ function processMessage(text) {
   if (!content) return null;
 
   // ── Split by comma, then split sub-entries within each segment ──
-  const categories = { lo: [], dd: [], dau: [], duoi: [], da: [], xc: [], dat: [] };
+  const categories = { lo: [], dd: [], dau: [], duoi: [], da: [], xc: [], dx: [], dat: [], other: [] };
   const segments = content.split(",").map((s) => s.trim()).filter(Boolean);
 
   for (const segment of segments) {
@@ -103,12 +103,14 @@ function processMessage(text) {
       else if (/dau/i.test(entry)) categories.dau.push(clean);
       else if (/da/i.test(entry)) categories.da.push(clean);
       else if (/xc/i.test(entry)) categories.xc.push(clean);
+      else if (/dx/i.test(entry)) categories.dx.push(clean);
       else if (/lo/i.test(entry)) categories.lo.push(clean);
+      else categories.other.push(clean);
     }
   }
 
   // ── Build formatted output (no headers, just entries grouped by blank lines) ──
-  const order = ["lo", "dd", "dau", "duoi", "da", "xc", "dat"];
+  const order = ["lo", "dd", "dau", "duoi", "da", "xc", "dx", "dat", "other"];
   const sections = [];
   for (const key of order) {
     if (categories[key].length > 0) {
