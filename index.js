@@ -67,8 +67,86 @@ function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// ─── Helper: get VN time suffix for 2d/3d/4d keys ───────────────
+function getTimeSuffix() {
+  // VN time = UTC+7
+  const now = new Date();
+  const vnHour = (now.getUTCHours() + 7) % 24;
+  const vnMinute = now.getUTCMinutes();
+  const vnTime = vnHour * 60 + vnMinute; // total minutes since midnight
+
+  const mnStart = 12 * 60;       // 12:00
+  const mnEnd = 16 * 60 + 30;    // 16:30
+  const mtStart = 16 * 60 + 50;  // 16:50
+  const mtEnd = 17 * 60 + 30;    // 17:30
+
+  if (vnTime >= mnStart && vnTime <= mnEnd) return "mn";
+  if (vnTime >= mtStart && vnTime <= mtEnd) return "mt";
+  return "";
+}
+
+function isSaturday() {
+  // VN time = UTC+7
+  const now = new Date();
+  const vnOffset = 7 * 60 * 60 * 1000;
+  const vnDate = new Date(now.getTime() + vnOffset);
+  return vnDate.getUTCDay() === 6; // 6 = Saturday
+}
+
+// ─── Helper: apply time-based suffix to key ──────────────────────
+function applyKeySuffix(key) {
+  const suffix = getTimeSuffix();
+  const lower = key.toLowerCase();
+
+  // 2d and 3d: apply mn/mt based on time
+  if (lower === "2d" || lower === "3d") {
+    if (suffix) return lower + suffix;
+    return lower;
+  }
+
+  // 4d: only on Saturday, always use mn
+  if (lower === "4d") {
+    if (isSaturday()) return lower + "mn";
+    return lower;
+  }
+
+  return lower;
+}
+
+// ─── Helper: remove backticks from string (no regex) ─────────────
+function removeBackticks(str) {
+  let result = "";
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] !== "`") {
+      result += str[i];
+    }
+  }
+  return result;
+}
+
+// ─── Helper: replace 'lo' with 'b' case-insensitive (no regex) ──
+function replaceLoWithB(str) {
+  let result = "";
+  let i = 0;
+  while (i < str.length) {
+    if (
+      i + 1 < str.length &&
+      (str[i] === "l" || str[i] === "L") &&
+      (str[i + 1] === "o" || str[i + 1] === "O")
+    ) {
+      result += "b";
+      i += 2;
+    } else {
+      result += str[i];
+      i++;
+    }
+  }
+  return result;
+}
+
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
+  // Step 1: Check for header and extract raw content after it
   if (!text.includes(HEADER_PATTERN)) return null;
 
   const lastIndex = text.lastIndexOf(HEADER_PATTERN);
@@ -78,47 +156,92 @@ function processMessage(text) {
     const firstIndex = text.indexOf(HEADER_PATTERN);
     content = text.substring(firstIndex + HEADER_PATTERN.length).trim();
   }
-
-  // Strip backticks
-  content = content.replace(/^`+/, "").replace(/`+$/, "").trim();
   if (!content) return null;
 
-  // ── Split by comma, then split sub-entries within each segment ──
-  const categories = { lo: [], dd: [], dau: [], duoi: [], da: [], xc: [], dx: [], dat: [], other: [] };
-  const segments = content.split(",").map((s) => s.trim()).filter(Boolean);
+  // Step 2: Remove extra backticks (no regex)
+  content = removeBackticks(content).trim();
+  if (!content) return null;
 
-  for (const segment of segments) {
-    // Split at boundaries: after digit+n, before new content
-    const subEntries = segment.split(/(?<=\d+n)\s+(?=\S)/i);
+  // Step 3: Separate by ','
+  const segments = content.split(",");
 
-    for (const entry of subEntries) {
-      if (!entry.trim()) continue;
-      // Replace 'lo' with 'b', keep spaces
-      const clean = entry.trim().replace(/lo/gi, "b");
+  // Step 4: For each instance, split by ' ' → first item is key, rest are values
+  //         Build object: { key: [values] }
+  const grouped = {};
 
-      // Categorize by keyword in original text
-      if (/dd/i.test(entry)) categories.dd.push(clean);
-      else if (/duoi/i.test(entry)) categories.duoi.push(clean);
-      else if (/dat/i.test(entry)) categories.dat.push(clean);
-      else if (/dau/i.test(entry)) categories.dau.push(clean);
-      else if (/da/i.test(entry)) categories.da.push(clean);
-      else if (/xc/i.test(entry)) categories.xc.push(clean);
-      else if (/dx/i.test(entry)) categories.dx.push(clean);
-      else if (/lo/i.test(entry)) categories.lo.push(clean);
-      else categories.other.push(clean);
+  for (let s = 0; s < segments.length; s++) {
+    const segment = segments[s].trim();
+    if (!segment) continue;
+
+    const parts = segment.split(" ").filter(function (p) { return p !== ""; });
+    if (parts.length === 0) continue;
+
+    // First item is the key (e.g. "lo", "2d", "dd"), rest are values
+    const rawKey = parts[0];
+    const values = parts.slice(1);
+
+    // Apply 'lo' → 'b' replacement on the key
+    const transformedKey = replaceLoWithB(rawKey);
+
+    // Apply time-based suffix to 2d/3d/4d keys
+    const finalKey = applyKeySuffix(transformedKey);
+
+    // Replace 'lo' with 'b' in each value
+    const transformedValues = [];
+    for (let v = 0; v < values.length; v++) {
+      transformedValues.push(replaceLoWithB(values[v]));
+    }
+
+    // Accumulate into grouped object
+    if (!grouped[finalKey]) {
+      grouped[finalKey] = [];
+    }
+    for (let v = 0; v < transformedValues.length; v++) {
+      grouped[finalKey].push(transformedValues[v]);
     }
   }
 
-  // ── Build formatted output (no headers, just entries grouped by blank lines) ──
-  const order = ["lo", "dd", "dau", "duoi", "da", "xc", "dx", "dat", "other"];
-  const sections = [];
-  for (const key of order) {
-    if (categories[key].length > 0) {
-      sections.push(categories[key].join("\n"));
+  // Step 5: Sort the object keys alphabetically ascending
+  const sortedKeys = Object.keys(grouped).sort();
+
+  // Step 6: Combine into nested arrays [[key, val1, val2, ...], ...]
+  const nestedArrays = [];
+  for (let k = 0; k < sortedKeys.length; k++) {
+    const key = sortedKeys[k];
+    const row = [key];
+    const vals = grouped[key];
+    for (let v = 0; v < vals.length; v++) {
+      row.push(vals[v]);
+    }
+    nestedArrays.push(row);
+  }
+
+  if (nestedArrays.length === 0) return null;
+
+  // Step 7: Flatten all groups into one token list
+  const allTokens = [];
+  for (let i = 0; i < nestedArrays.length; i++) {
+    for (let j = 0; j < nestedArrays[i].length; j++) {
+      allTokens.push(nestedArrays[i][j]);
     }
   }
 
-  return sections.length > 0 ? sections.join("\n\n") : null;
+  // Combine all tokens: use '\n' after tokens ending with 'n', otherwise ' '
+  let result = "";
+  for (let i = 0; i < allTokens.length; i++) {
+    result += allTokens[i];
+    if (i < allTokens.length - 1) {
+      // Check if current token ends with 'n' or 'N'
+      var lastChar = allTokens[i][allTokens[i].length - 1];
+      if (lastChar === "n" || lastChar === "N") {
+        result += "\n";
+      } else {
+        result += " ";
+      }
+    }
+  }
+
+  return result;
 }
 
 // ─── Send to all chats in chat.txt ────────────────────────────────
