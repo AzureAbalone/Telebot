@@ -75,29 +75,31 @@ function processMessage(text) {
   if (!content) return null;
 
   // ── Split by comma, then split sub-entries within each segment ──
-  const categories = { lo: [], dd: [], dau: [], duoi: [], da: [] };
+  const categories = { lo: [], dd: [], dau: [], duoi: [], da: [], xc: [], dat: [] };
   const segments = content.split(",").map((s) => s.trim()).filter(Boolean);
 
   for (const segment of segments) {
-    // Split segment into sub-entries at boundaries: after digit+n, before new content
+    // Split at boundaries: after digit+n, before new content
     const subEntries = segment.split(/(?<=\d+n)\s+(?=\S)/i);
 
     for (const entry of subEntries) {
       if (!entry.trim()) continue;
-      // Remove spaces, replace 'lo' with 'b'
-      const clean = entry.replace(/\s+/g, "").replace(/lo/gi, "b");
+      // Replace 'lo' with 'b', keep spaces
+      const clean = entry.trim().replace(/lo/gi, "b");
 
       // Categorize by keyword in original text
       if (/dd/i.test(entry))        categories.dd.push(clean);
       else if (/duoi/i.test(entry)) categories.duoi.push(clean);
+      else if (/dat/i.test(entry))  categories.dat.push(clean);
       else if (/dau/i.test(entry))  categories.dau.push(clean);
       else if (/da/i.test(entry))   categories.da.push(clean);
+      else if (/xc/i.test(entry))   categories.xc.push(clean);
       else if (/lo/i.test(entry))   categories.lo.push(clean);
     }
   }
 
   // ── Build formatted output (no headers, just entries grouped by blank lines) ──
-  const order = ["lo", "dd", "dau", "duoi", "da"];
+  const order = ["lo", "dd", "dau", "duoi", "da", "xc", "dat"];
   const sections = [];
   for (const key of order) {
     if (categories[key].length > 0) {
@@ -162,7 +164,10 @@ bot.on("text", async (ctx) => {
       ALLOWED_FORWARD_FROM.includes(senderId) ||
       (forwardFrom && ALLOWED_FORWARD_FROM.includes(forwardFrom));
 
-    if (!isAllowed) return;
+    if (!isAllowed) {
+      console.log(`⛔ [Bot/DM] Rejected message from unauthorized user ${senderId} (forward: ${forwardFrom})`);
+      return;
+    }
 
     // For DMs: try with header first, then treat as raw data
     const result = processMessage(text);
@@ -224,15 +229,18 @@ async function startUserbot() {
 
       console.log("✅ [Userbot] Detected target message, processing...");
 
-      // Reply directly in the SAME chat
+      // Only reply in allowed chats from chat.txt
       const chatId = message.chatId || message.peerId;
+      const allowedChats = loadChatIds();
+      if (!allowedChats.includes(chatId.toString())) {
+        console.log(`⛔ [Userbot] Rejected — chat ${chatId} not in chat.txt`);
+        return;
+      }
       try {
         await bot.telegram.sendMessage(chatId.toString(), `<pre>${escapeHtml(result)}</pre>`, { parse_mode: "HTML" });
         console.log(`📤 [Userbot] Replied in chat ${chatId}`);
       } catch (e) {
         console.error(`❌ [Userbot] Failed to reply in chat ${chatId}:`, e.message);
-        // Fallback: send to chat.txt chats
-        await sendToAllChats(result);
       }
     } catch (err) {
       console.error("❌ [Userbot] Error handling message:", err.message);
