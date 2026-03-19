@@ -22,10 +22,19 @@ const SESSION_STRING = process.env.SESSION_STRING || "";
 const CHAT_FILE = path.join(__dirname, "chat.txt");
 const PORT = process.env.PORT || 3000;
 
-// ─── Health check server (keeps Render alive) ─────────────────────
+// ─── Health check server (for cron jobs) ───────────────────────────
+const startedAt = Date.now();
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end("Bot is running ✅");
+  const uptime = Math.floor((Date.now() - startedAt) / 1000);
+  const status = {
+    status: "ok",
+    uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${uptime % 60}s`,
+    started: new Date(startedAt).toISOString(),
+    chats: loadChatIds().length,
+    timestamp: new Date().toISOString(),
+  };
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(status));
 });
 
 server.listen(PORT, () => {
@@ -88,13 +97,13 @@ function processMessage(text) {
       const clean = entry.trim().replace(/lo/gi, "b");
 
       // Categorize by keyword in original text
-      if (/dd/i.test(entry))        categories.dd.push(clean);
+      if (/dd/i.test(entry)) categories.dd.push(clean);
       else if (/duoi/i.test(entry)) categories.duoi.push(clean);
-      else if (/dat/i.test(entry))  categories.dat.push(clean);
-      else if (/dau/i.test(entry))  categories.dau.push(clean);
-      else if (/da/i.test(entry))   categories.da.push(clean);
-      else if (/xc/i.test(entry))   categories.xc.push(clean);
-      else if (/lo/i.test(entry))   categories.lo.push(clean);
+      else if (/dat/i.test(entry)) categories.dat.push(clean);
+      else if (/dau/i.test(entry)) categories.dau.push(clean);
+      else if (/da/i.test(entry)) categories.da.push(clean);
+      else if (/xc/i.test(entry)) categories.xc.push(clean);
+      else if (/lo/i.test(entry)) categories.lo.push(clean);
     }
   }
 
@@ -158,7 +167,7 @@ bot.on("text", async (ctx) => {
     const senderId = msg.from?.id;
     const forwardFrom =
       msg.forward_origin?.type === "user" ? msg.forward_origin.sender_user?.id :
-      msg.forward_from?.id ?? null;
+        msg.forward_from?.id ?? null;
 
     const isAllowed =
       ALLOWED_FORWARD_FROM.includes(senderId) ||
@@ -222,12 +231,13 @@ async function startUserbot() {
       const senderId = message.senderId?.toString();
       if (senderId !== TARGET_BOT_ID.toString()) return;
 
-      console.log(`📩 [Userbot] Message from bot ${TARGET_BOT_ID}: "${message.text.substring(0, 80)}..."`);
+      // Only care about messages with the header
+      if (!message.text.includes(HEADER_PATTERN)) return;
+
+      console.log(`📩 [Userbot] Detected header message, processing...`);
 
       const result = processMessage(message.text);
       if (!result) return;
-
-      console.log("✅ [Userbot] Detected target message, processing...");
 
       // Only reply in allowed chats from chat.txt
       const chatId = message.chatId || message.peerId;
