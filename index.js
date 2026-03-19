@@ -87,6 +87,22 @@ server.listen(PORT, () => {
   log("🌐 [Health]", `Server listening on port ${PORT}`);
 });
 
+// ─── Normalize Telegram chat IDs ──────────────────────────────────
+// Supergroups: Telegram internally uses -100XXXXXXXXXX
+// Users often store -XXXXXXXXXX (without -100 prefix)
+// This function normalizes both forms to the FULL -100 form
+function normalizeChatId(id) {
+  const s = String(id).trim();
+  // If it starts with -100 and has more than 4 digits after, it's already full form
+  if (s.indexOf("-100") === 0 && s.length > 7) return s;
+  // If it starts with - but not -100, add the -100 prefix
+  if (s.indexOf("-") === 0) {
+    const num = s.substring(1); // remove leading -
+    return "-100" + num;
+  }
+  return s;
+}
+
 // ─── Load chat IDs from chat.txt ──────────────────────────────────
 function loadChatIds() {
   try {
@@ -100,7 +116,7 @@ function loadChatIds() {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"));
-    log("📄 [Config]", `Loaded ${ids.length} chat(s) from chat.txt:`, ids);
+    log("📄 [Config]", `Loaded ${ids.length} chat(s) from chat.txt (raw):`, ids);
     return ids;
   } catch (err) {
     logError("❌ [Config]", "Error loading chat.txt:", err.message);
@@ -322,7 +338,8 @@ async function sendToAllChats(result, sourceInfo) {
 
   log("📡 [Broadcast]", `Sending to ${chatIds.length} chat(s) | source: ${sourceInfo || "unknown"} | content: ${preview(result)}`);
 
-  for (const chatId of chatIds) {
+  for (const rawChatId of chatIds) {
+    const chatId = normalizeChatId(rawChatId);
     try {
       const html = `<pre>${escapeHtml(result)}</pre>`;
       await bot.telegram.sendMessage(chatId, html, { parse_mode: "HTML" });
@@ -454,14 +471,15 @@ async function startUserbot() {
 
       log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
 
-      // Only reply in allowed chats from chat.txt
-      const allowedChats = loadChatIds();
-      if (!allowedChats.includes(chatId.toString())) {
-        log("⛔ [Userbot]", `REJECTED — chat ${chatId} not in chat.txt (allowed: [${allowedChats.join(", ")}])`);
+      // Only reply in allowed chats from chat.txt (normalize both sides)
+      const normalizedChatId = normalizeChatId(chatId);
+      const allowedChats = loadChatIds().map(normalizeChatId);
+      if (!allowedChats.includes(normalizedChatId)) {
+        log("⛔ [Userbot]", `REJECTED — chat ${chatId} (normalized: ${normalizedChatId}) not in allowed: [${allowedChats.join(", ")}]`);
         return;
       }
       try {
-        await bot.telegram.sendMessage(chatId.toString(), `<pre>${escapeHtml(result)}</pre>`, { parse_mode: "HTML" });
+        await bot.telegram.sendMessage(normalizedChatId, `<pre>${escapeHtml(result)}</pre>`, { parse_mode: "HTML" });
         log("📤 [Userbot]", `✅ Delivered to chat ${chatId} | result: ${preview(result)}`);
       } catch (e) {
         logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
