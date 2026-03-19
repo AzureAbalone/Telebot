@@ -1,0 +1,225 @@
+require("dotenv").config();
+const { Telegraf } = require("telegraf");
+const { TelegramClient } = require("telegram");
+const { StringSession } = require("telegram/sessions");
+const { NewMessage } = require("telegram/events");
+const input = require("input");
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
+
+// ─── Config ───────────────────────────────────────────────────────
+const bot = new Telegraf(process.env.BOT_TOKEN);
+
+const TARGET_BOT_ID = 6218688053;
+const HEADER_PATTERN = "📌 Tin vượt chuẩn trả lại những số sau:";
+
+const API_ID = parseInt(process.env.API_ID);
+const API_HASH = process.env.API_HASH;
+const SESSION_STRING = process.env.SESSION_STRING || "";
+
+const CHAT_FILE = path.join(__dirname, "chat.txt");
+const PORT = process.env.PORT || 3000;
+
+// ─── Health check server (keeps Render alive) ─────────────────────
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("Bot is running ✅");
+});
+
+server.listen(PORT, () => {
+  console.log(`🌐 Health server on port ${PORT}`);
+});
+
+// ─── Load chat IDs from chat.txt ──────────────────────────────────
+function loadChatIds() {
+  try {
+    if (!fs.existsSync(CHAT_FILE)) {
+      fs.writeFileSync(CHAT_FILE, "# Add chat IDs here, one per line\n# Example: -5157920720\n");
+      console.log("📄 Created chat.txt — add your group chat IDs there.");
+      return [];
+    }
+    const content = fs.readFileSync(CHAT_FILE, "utf-8");
+    const ids = content
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"));
+    console.log(`📄 Loaded ${ids.length} chat(s) from chat.txt:`, ids);
+    return ids;
+  } catch (err) {
+    console.error("❌ Error loading chat.txt:", err.message);
+    return [];
+  }
+}
+
+// ─── Helper: process message ─────────────────────────────────────
+function processMessage(text) {
+  if (!text.includes(HEADER_PATTERN)) return null;
+
+  const lastIndex = text.lastIndexOf(HEADER_PATTERN);
+  let content = text.substring(lastIndex + HEADER_PATTERN.length).trim();
+
+  if (!content) {
+    const firstIndex = text.indexOf(HEADER_PATTERN);
+    content = text.substring(firstIndex + HEADER_PATTERN.length).trim();
+  }
+
+  // Strip backticks from start and end (the source bot wraps content in `)
+  content = content.replace(/^`+/, "").replace(/`+$/, "").trim();
+
+  // Replace 'lo' with 'b'
+  const replaced = content.replace(/\blo\b/gi, "b");
+  return replaced.trim() ? replaced : null;
+}
+
+// ─── Send to all chats in chat.txt ────────────────────────────────
+async function sendToAllChats(result) {
+  const chatIds = loadChatIds();
+  if (chatIds.length === 0) {
+    console.log("⚠️  No chats in chat.txt to send to.");
+    return;
+  }
+
+  for (const chatId of chatIds) {
+    try {
+      await bot.telegram.sendMessage(chatId, result);
+      console.log(`📤 Sent to chat ${chatId}`);
+    } catch (err) {
+      console.error(`❌ Failed to send to ${chatId}:`, err.message);
+    }
+  }
+}
+
+// ─── Telegraf Bot Commands ────────────────────────────────────────
+bot.start((ctx) => {
+  ctx.reply(
+    "👋 Xin chào! Bot tự động đọc tin vượt chuẩn và thay 'lo' → 'b'.\n" +
+    "Bot đang chạy ở chế độ tự động."
+  );
+});
+
+bot.help((ctx) => {
+  ctx.reply(
+    "📖 Bot tự động:\n" +
+    "• Đọc tin từ bot vượt chuẩn trong group\n" +
+    "• Thay 'lo' → 'b'\n" +
+    "• Gửi kết quả về tất cả group trong chat.txt\n\n" +
+    "Bạn cũng có thể forward tin nhắn trực tiếp cho bot."
+  );
+});
+
+// Manual fallback — only respond in groups, ignore DMs
+bot.on("text", (ctx) => {
+  // Only process messages from groups and supergroups
+  const chatType = ctx.chat?.type;
+  if (chatType !== "group" && chatType !== "supergroup") {
+    return; // Ignore private/DM messages
+  }
+
+  const text = ctx.message.text || "";
+  const result = processMessage(text);
+  if (result) {
+    ctx.reply(result);
+    console.log("📤 [Bot] Sent modified message:", result);
+  }
+});
+
+// ─── GramJS Userbot (auto-read from group) ────────────────────────
+async function startUserbot() {
+  const session = new StringSession(SESSION_STRING);
+  const client = new TelegramClient(session, API_ID, API_HASH, {
+    connectionRetries: Infinity,
+    retryDelay: 3000,
+    autoReconnect: true,
+    timeout: 30,
+    useWSS: false,
+  });
+
+  console.log("🔑 Logging in to Telegram user account...");
+  await client.start({
+    phoneNumber: async () => await input.text("📱 Enter your phone number: "),
+    password: async () => await input.text("🔒 Enter 2FA password (if any): "),
+    phoneCode: async () => await input.text("📟 Enter the code you received: "),
+    onError: (err) => console.error("❌ Login error:", err),
+  });
+
+  const savedSession = client.session.save();
+  console.log("\n✅ Logged in successfully!");
+  console.log(`SESSION_STRING=${savedSession}\n`);
+
+  // Listen for new messages
+  client.addEventHandler(async (event) => {
+    try {
+      const message = event.message;
+      if (!message || !message.text) return;
+
+      const senderId = message.senderId?.toString();
+      if (senderId !== TARGET_BOT_ID.toString()) return;
+
+      console.log(`📩 [Userbot] Message from bot ${TARGET_BOT_ID}: "${message.text.substring(0, 80)}..."`);
+
+      const result = processMessage(message.text);
+      if (!result) return;
+
+      console.log("✅ [Userbot] Detected target message, processing...");
+      await sendToAllChats(result);
+    } catch (err) {
+      console.error("❌ [Userbot] Error handling message:", err.message);
+    }
+  }, new NewMessage({}));
+
+  console.log("👁️  Userbot is monitoring for messages from bot", TARGET_BOT_ID);
+
+  // Keep-alive: ping Telegram periodically to prevent TIMEOUT
+  setInterval(async () => {
+    try {
+      if (client.connected) {
+        await client.invoke(new (require("telegram/tl").Api.Ping)({ pingId: BigInt(Math.floor(Math.random() * 1e15)) }));
+      } else {
+        console.log("🔄 Reconnecting userbot...");
+        await client.connect();
+        console.log("✅ Reconnected!");
+      }
+    } catch (err) {
+      console.error("⚠️  Keep-alive/reconnect error:", err.message);
+      try {
+        await client.connect();
+        console.log("✅ Reconnected after keep-alive failure!");
+      } catch (reconnectErr) {
+        console.error("❌ Reconnect failed:", reconnectErr.message);
+      }
+    }
+  }, 60000); // ping every 60 seconds
+}
+
+// ─── Launch everything ────────────────────────────────────────────
+async function main() {
+  loadChatIds();
+
+  bot.launch();
+  console.log("🤖 Telegraf bot is running...");
+
+  if (API_ID && API_HASH) {
+    try {
+      await startUserbot();
+    } catch (err) {
+      console.error("❌ Userbot failed to start:", err.message);
+      console.log("⚠️  Bot will still work for forwarded/pasted messages.");
+    }
+  } else {
+    console.log("⚠️  No API_ID/API_HASH in .env — userbot disabled.");
+  }
+}
+
+main();
+
+process.once("SIGINT", () => { bot.stop("SIGINT"); process.exit(0); });
+process.once("SIGTERM", () => { bot.stop("SIGTERM"); process.exit(0); });
+
+// Catch uncaught errors to prevent crashes
+process.on("uncaughtException", (err) => {
+  console.error("⚠️  Uncaught exception:", err.message);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("⚠️  Unhandled rejection:", err.message || err);
+});
