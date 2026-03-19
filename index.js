@@ -255,7 +255,7 @@ async function startUserbot() {
     } catch (err) {
       console.error("❌ [Userbot] Error handling message:", err.message);
     }
-  }, new NewMessage({}));
+  }, new NewMessage({ fromUsers: [TARGET_BOT_ID] }));
 
   console.log("👁️  Userbot is monitoring for messages from bot", TARGET_BOT_ID);
 
