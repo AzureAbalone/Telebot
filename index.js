@@ -40,6 +40,14 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify(status));
 });
 
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.log(`⚠️  Port ${PORT} already in use — health server skipped (bot still runs)`);
+  } else {
+    console.error("❌ Health server error:", err);
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`🌐 Health server on port ${PORT}`);
 });
