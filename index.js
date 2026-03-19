@@ -181,16 +181,22 @@ function processMessage(text) {
     const values = parts.slice(1);
 
     // Apply 'lo' → 'b' replacement on the key
-    const transformedKey = replaceLoWithB(rawKey);
-
-    // Apply time-based suffix to 2d/3d/4d keys
-    const finalKey = applyKeySuffix(transformedKey);
+    let transformedKey = replaceLoWithB(rawKey);
 
     // Replace 'lo' with 'b' in each value
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
       transformedValues.push(replaceLoWithB(values[v]));
     }
+
+    // Special rule: if key is "ag" and first value is "tn", combine into "2d"
+    if (transformedKey === "ag" && transformedValues.length > 0 && transformedValues[0] === "tn") {
+      transformedKey = "2d";
+      transformedValues.shift();
+    }
+
+    // Apply time-based suffix to 2d/3d/4d keys
+    const finalKey = applyKeySuffix(transformedKey);
 
     // Accumulate into grouped object
     if (!grouped[finalKey]) {
