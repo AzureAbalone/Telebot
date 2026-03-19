@@ -475,13 +475,15 @@ async function startUserbot() {
 
       // Only reply in allowed chats from chat.txt
       const allowedChats = loadChatIds();
-      if (!allowedChats.includes(chatId.toString())) {
-        log("⛔ [Userbot]", `REJECTED — chat ${chatId} not in chat.txt (allowed: [${allowedChats.join(", ")}])`);
+      const botChatId = Number(chatId); // Convert BigInt from GramJS to Number for Bot API
+      if (!allowedChats.includes(chatId.toString()) && !allowedChats.includes(botChatId.toString())) {
+        log("⛔ [Userbot]", `REJECTED — chat ${chatId} (botId: ${botChatId}) not in chat.txt (allowed: [${allowedChats.join(", ")}])`);
         return;
       }
       try {
-        await client.sendMessage(chatId, { message: result });
-        log("📤 [Userbot]", `✅ Delivered to chat ${chatId} | result: ${preview(result)}`);
+        const html = `<pre>${escapeHtml(result)}</pre>`;
+        await bot.telegram.sendMessage(botChatId, html, { parse_mode: "HTML" });
+        log("📤 [Bot via Userbot]", `✅ Delivered to chat ${botChatId} | result: ${preview(result)}`);
       } catch (e) {
         logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
       }
