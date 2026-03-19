@@ -13,6 +13,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 const TARGET_BOT_ID = 6218688053;
 const HEADER_PATTERN = "📌 Tin vượt chuẩn trả lại những số sau:";
+const ALLOWED_FORWARD_FROM = [5646104183, 5064866550];
 
 const API_ID = parseInt(process.env.API_ID);
 const API_HASH = process.env.API_HASH;
@@ -52,6 +53,11 @@ function loadChatIds() {
   }
 }
 
+// ─── Helper: escape HTML special chars ────────────────────────────
+function escapeHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
   if (!text.includes(HEADER_PATTERN)) return null;
@@ -64,12 +70,42 @@ function processMessage(text) {
     content = text.substring(firstIndex + HEADER_PATTERN.length).trim();
   }
 
-  // Strip backticks from start and end (the source bot wraps content in `)
+  // Strip backticks
   content = content.replace(/^`+/, "").replace(/`+$/, "").trim();
+  if (!content) return null;
 
-  // Replace 'lo' with 'b'
-  const replaced = content.replace(/\blo\b/gi, "b");
-  return replaced.trim() ? replaced : null;
+  // ── Split by comma, then split sub-entries within each segment ──
+  const categories = { lo: [], dd: [], dau: [], duoi: [], da: [] };
+  const segments = content.split(",").map((s) => s.trim()).filter(Boolean);
+
+  for (const segment of segments) {
+    // Split segment into sub-entries at boundaries: after digit+n, before new content
+    const subEntries = segment.split(/(?<=\d+n)\s+(?=\S)/i);
+
+    for (const entry of subEntries) {
+      if (!entry.trim()) continue;
+      // Remove spaces, replace 'lo' with 'b'
+      const clean = entry.replace(/\s+/g, "").replace(/lo/gi, "b");
+
+      // Categorize by keyword in original text
+      if (/dd/i.test(entry))        categories.dd.push(clean);
+      else if (/duoi/i.test(entry)) categories.duoi.push(clean);
+      else if (/dau/i.test(entry))  categories.dau.push(clean);
+      else if (/da/i.test(entry))   categories.da.push(clean);
+      else if (/lo/i.test(entry))   categories.lo.push(clean);
+    }
+  }
+
+  // ── Build formatted output (no headers, just entries grouped by blank lines) ──
+  const order = ["lo", "dd", "dau", "duoi", "da"];
+  const sections = [];
+  for (const key of order) {
+    if (categories[key].length > 0) {
+      sections.push(categories[key].join("\n"));
+    }
+  }
+
+  return sections.length > 0 ? sections.join("\n\n") : null;
 }
 
 // ─── Send to all chats in chat.txt ────────────────────────────────
@@ -82,7 +118,8 @@ async function sendToAllChats(result) {
 
   for (const chatId of chatIds) {
     try {
-      await bot.telegram.sendMessage(chatId, result);
+      const html = `<pre>${escapeHtml(result)}</pre>`;
+      await bot.telegram.sendMessage(chatId, html, { parse_mode: "HTML" });
       console.log(`📤 Sent to chat ${chatId}`);
     } catch (err) {
       console.error(`❌ Failed to send to ${chatId}:`, err.message);
@@ -108,19 +145,43 @@ bot.help((ctx) => {
   );
 });
 
-// Manual fallback — only respond in groups, ignore DMs
-bot.on("text", (ctx) => {
-  // Only process messages from groups and supergroups
+// Handle text — groups directly, DMs only if forwarded from allowed users
+bot.on("text", async (ctx) => {
   const chatType = ctx.chat?.type;
-  if (chatType !== "group" && chatType !== "supergroup") {
-    return; // Ignore private/DM messages
+  const msg = ctx.message;
+  const text = msg.text || "";
+
+  // ── Private / DM ──
+  if (chatType === "private") {
+    const senderId = msg.from?.id;
+    const forwardFrom =
+      msg.forward_origin?.type === "user" ? msg.forward_origin.sender_user?.id :
+      msg.forward_from?.id ?? null;
+
+    const isAllowed =
+      ALLOWED_FORWARD_FROM.includes(senderId) ||
+      (forwardFrom && ALLOWED_FORWARD_FROM.includes(forwardFrom));
+
+    if (!isAllowed) return;
+
+    // For DMs: try with header first, then treat as raw data
+    const result = processMessage(text);
+    if (result) {
+      const html = `<pre>${escapeHtml(result)}</pre>`;
+      ctx.reply(html, { parse_mode: "HTML" });
+      console.log("📤 [Bot/DM] From", senderId, "→", result);
+    }
+    return;
   }
 
-  const text = ctx.message.text || "";
-  const result = processMessage(text);
-  if (result) {
-    ctx.reply(result);
-    console.log("📤 [Bot] Sent modified message:", result);
+  // ── Groups / Supergroups ──
+  if (chatType === "group" || chatType === "supergroup") {
+    const result = processMessage(text);
+    if (result) {
+      const html = `<pre>${escapeHtml(result)}</pre>`;
+      ctx.reply(html, { parse_mode: "HTML" });
+      console.log("📤 [Bot/Group] Sent modified message:", result);
+    }
   }
 });
 
@@ -162,7 +223,17 @@ async function startUserbot() {
       if (!result) return;
 
       console.log("✅ [Userbot] Detected target message, processing...");
-      await sendToAllChats(result);
+
+      // Reply directly in the SAME chat
+      const chatId = message.chatId || message.peerId;
+      try {
+        await bot.telegram.sendMessage(chatId.toString(), `<pre>${escapeHtml(result)}</pre>`, { parse_mode: "HTML" });
+        console.log(`📤 [Userbot] Replied in chat ${chatId}`);
+      } catch (e) {
+        console.error(`❌ [Userbot] Failed to reply in chat ${chatId}:`, e.message);
+        // Fallback: send to chat.txt chats
+        await sendToAllChats(result);
+      }
     } catch (err) {
       console.error("❌ [Userbot] Error handling message:", err.message);
     }
