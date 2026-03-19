@@ -147,6 +147,13 @@ function replaceLoWithB(str) {
     ) {
       result += "b";
       i += 2;
+    } else if (
+      i + 1 < str.length &&
+      (str[i] === "d" || str[i] === "D") &&
+      (str[i + 1] === "x" || str[i + 1] === "X")
+    ) {
+      result += "da";
+      i += 2;
     } else {
       result += str[i];
       i++;
