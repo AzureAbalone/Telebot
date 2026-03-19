@@ -480,7 +480,7 @@ async function startUserbot() {
         return;
       }
       try {
-        await bot.telegram.sendMessage(chatId.toString(), `<pre>${escapeHtml(result)}</pre>`, { parse_mode: "HTML" });
+        await client.sendMessage(chatId, { message: result });
         log("📤 [Userbot]", `✅ Delivered to chat ${chatId} | result: ${preview(result)}`);
       } catch (e) {
         logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
