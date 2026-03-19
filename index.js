@@ -417,8 +417,14 @@ bot.on("text", async (ctx) => {
 
   // ── Groups / Supergroups ──
   if (chatType === "group" || chatType === "supergroup") {
+    const senderId = msg.from?.id;
     const hasHeader = text.includes(HEADER_PATTERN);
     log("📩 [Bot/Group]", `Message from ${who} in ${where} | has_header: ${hasHeader} | preview: ${preview(text)}`);
+
+    // Only process messages from the target bot
+    if (senderId !== TARGET_BOT_ID) {
+      return;
+    }
 
     const result = processMessage(text);
     if (result) {
