@@ -197,6 +197,22 @@ function replaceLoWithB(str) {
   return result;
 }
 
+// ─── Helper: replace '; ' with '/' (no regex) ───────────────────
+function replaceSemicolonSpace(str) {
+  let result = "";
+  let i = 0;
+  while (i < str.length) {
+    if (str[i] === ";" && i + 1 < str.length && str[i + 1] === " ") {
+      result += "/";
+      i += 2;
+    } else {
+      result += str[i];
+      i++;
+    }
+  }
+  return result;
+}
+
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
   // Step 1: Check for header and extract raw content after it
@@ -308,6 +324,9 @@ function processMessage(text) {
       }
     }
   }
+
+  // Step 8: Replace '; ' with '/'
+  result = replaceSemicolonSpace(result);
 
   return result;
 }
