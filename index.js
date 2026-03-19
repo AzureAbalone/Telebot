@@ -13,7 +13,10 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 const TARGET_BOT_ID = 6218688053;
 const HEADER_PATTERN = "📌 Tin vượt chuẩn trả lại những số sau:";
-const ALLOWED_FORWARD_FROM = [5646104183, 5064866550];
+const ALLOWED_FORWARD_FROM = (process.env.ALLOWED_FORWARD_FROM || "")
+  .split(",")
+  .map((id) => parseInt(id.trim(), 10))
+  .filter((id) => !isNaN(id));
 
 const API_ID = parseInt(process.env.API_ID);
 const API_HASH = process.env.API_HASH;
