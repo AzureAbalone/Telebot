@@ -32,7 +32,7 @@ function userLabel(from) {
 function chatLabel(chat) {
   if (!chat) return "unknown-chat";
   const title = chat.title || chat.username || chat.first_name || "DM";
-  return `"${title}" (type:${chat.type}, id:${chat.id})`;  
+  return `"${title}" (type:${chat.type}, id:${chat.id})`;
 }
 
 function preview(text, maxLen) {
@@ -232,7 +232,6 @@ function processMessage(text) {
   if (!content) return null;
 
   // Step 3: Normalize newlines to commas, then separate by ','
-  // Replace all newline characters with commas so multi-line input is handled correctly
   var normalized = "";
   for (var c = 0; c < content.length; c++) {
     if (content[c] === "\n" || content[c] === "\r") {
@@ -244,7 +243,6 @@ function processMessage(text) {
   const segments = normalized.split(",");
 
   // Step 4: For each instance, split by ' ' → first item is key, rest are values
-  //         Build object: { key: [values] }
   const grouped = {};
 
   for (let s = 0; s < segments.length; s++) {
@@ -254,14 +252,11 @@ function processMessage(text) {
     const parts = segment.split(" ").filter(function (p) { return p !== ""; });
     if (parts.length === 0) continue;
 
-    // First item is the key (e.g. "lo", "2d", "dd"), rest are values
     const rawKey = parts[0];
     const values = parts.slice(1);
 
-    // Apply 'lo' → 'b' replacement on the key
     let transformedKey = replaceLoWithB(rawKey);
 
-    // Replace 'lo' with 'b' in each value
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
       transformedValues.push(replaceLoWithB(values[v]));
@@ -276,52 +271,34 @@ function processMessage(text) {
     // Apply time-based suffix to 2d/3d/4d keys
     const finalKey = applyKeySuffix(transformedKey);
 
-    // Accumulate into grouped object
+    // Accumulate into grouped object: { key: [[val1, val2], [val3, val4], ...] }
     if (!grouped[finalKey]) {
       grouped[finalKey] = [];
     }
-    for (let v = 0; v < transformedValues.length; v++) {
-      grouped[finalKey].push(transformedValues[v]);
+    if (transformedValues.length > 0) {
+      grouped[finalKey].push(transformedValues);
     }
   }
 
   // Step 5: Sort the object keys alphabetically ascending
   const sortedKeys = Object.keys(grouped).sort();
 
-  // Step 6: Combine into nested arrays [[key, val1, val2, ...], ...]
-  const nestedArrays = [];
+  if (sortedKeys.length === 0) return null;
+
+  // Step 6+7: Build result — each sub-array becomes its own line: "key val1 val2"
+  let result = "";
   for (let k = 0; k < sortedKeys.length; k++) {
     const key = sortedKeys[k];
-    const row = [key];
-    const vals = grouped[key];
-    for (let v = 0; v < vals.length; v++) {
-      row.push(vals[v]);
-    }
-    nestedArrays.push(row);
-  }
-
-  if (nestedArrays.length === 0) return null;
-
-  // Step 7: Flatten all groups into one token list
-  const allTokens = [];
-  for (let i = 0; i < nestedArrays.length; i++) {
-    for (let j = 0; j < nestedArrays[i].length; j++) {
-      allTokens.push(nestedArrays[i][j]);
-    }
-  }
-
-  // Combine all tokens: use '\n' after tokens ending with 'n', otherwise ' '
-  let result = "";
-  for (let i = 0; i < allTokens.length; i++) {
-    result += allTokens[i];
-    if (i < allTokens.length - 1) {
-      // Check if current token ends with 'n' or 'N'
-      var lastChar = allTokens[i][allTokens[i].length - 1];
-      if (lastChar === "n" || lastChar === "N") {
-        result += "\n";
-      } else {
-        result += " ";
+    const subArrays = grouped[key];
+    for (let s = 0; s < subArrays.length; s++) {
+      let line = key;
+      for (let v = 0; v < subArrays[s].length; v++) {
+        line += " " + subArrays[s][v];
       }
+      if (result.length > 0) {
+        result += "\n";
+      }
+      result += line;
     }
   }
 
@@ -329,27 +306,6 @@ function processMessage(text) {
   result = replaceSemicolonSpace(result);
 
   return result;
-}
-
-// ─── Send to all chats in chat.txt ────────────────────────────────
-async function sendToAllChats(result, sourceInfo) {
-  const chatIds = loadChatIds();
-  if (chatIds.length === 0) {
-    log("⚠️  [Broadcast]", "No chats in chat.txt to send to.");
-    return;
-  }
-
-  log("📡 [Broadcast]", `Sending to ${chatIds.length} chat(s) | source: ${sourceInfo || "unknown"} | content: ${preview(result)}`);
-
-  for (const chatId of chatIds) {
-    try {
-      const html = `<pre>${escapeHtml(result)}</pre>`;
-      await bot.telegram.sendMessage(chatId, html, { parse_mode: "HTML" });
-      log("📤 [Broadcast]", `✅ Delivered to chat ${chatId}`);
-    } catch (err) {
-      logError("❌ [Broadcast]", `Failed to send to ${chatId}:`, err.message);
-    }
-  }
 }
 
 // ─── Telegraf Bot Commands ────────────────────────────────────────
