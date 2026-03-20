@@ -290,7 +290,30 @@ function processMessage(text) {
       normalized += content[c];
     }
   }
-  const segments = normalized.split(",");
+  const rawSegments = normalized.split(",");
+
+  // Step 3b: Further split segments at 'n' boundaries (not 'tn')
+  // e.g. "11 dd 360n 49 67 79 dd 10n" → ["11 dd 360n", "49 67 79 dd 10n"]
+  const segments = [];
+  for (let rs = 0; rs < rawSegments.length; rs++) {
+    const seg = rawSegments[rs].trim();
+    if (!seg) continue;
+    const words = seg.split(" ").filter(function (w) { return w !== ""; });
+    var current = [];
+    for (let w = 0; w < words.length; w++) {
+      current.push(words[w]);
+      var lower = words[w].toLowerCase();
+      // If word ends in 'n' and isn't exactly 'tn', this ends the current entry
+      if (lower.length > 0 && lower[lower.length - 1] === "n" && lower !== "tn") {
+        segments.push(current.join(" "));
+        current = [];
+      }
+    }
+    // Any remaining words that didn't end with 'n'
+    if (current.length > 0) {
+      segments.push(current.join(" "));
+    }
+  }
 
   // Step 4: For each instance, split by ' ' → first item is key, rest are values
   const grouped = {};
