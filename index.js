@@ -213,6 +213,56 @@ function replaceSemicolonSpace(str) {
   return result;
 }
 
+// ─── Helper: classify line for custom sort order ────────────────
+function getLineGroup(lineArr) {
+  if (!lineArr || lineArr.length === 0) return 99;
+
+  var hasB = false;
+  var hasDd = false;
+  var hasDuoi = false;
+  var hasXc = false;
+  var hasDau = false;
+  var hasXcDau = false;
+  var hasXcDuoi = false;
+
+  for (var i = 0; i < lineArr.length; i++) {
+    var el = lineArr[i].toLowerCase();
+    if (el === "b") hasB = true;
+    if (el === "dd") hasDd = true;
+    if (el === "duoi" || el === "dui") hasDuoi = true;
+    if (el === "xc") hasXc = true;
+    if (el === "dau") hasDau = true;
+    if (el === "xcdau" || el === "xdau") hasXcDau = true;
+    if (el === "xcduoi" || el === "xcdui") hasXcDuoi = true;
+  }
+
+  // Group 1: contains 'b'
+  if (hasB) return 1;
+
+  // Group 2: contains 'dd'
+  if (hasDd) return 2;
+
+  // Group 3: contains 'dau' (standalone, no xc)
+  if (hasDau && !hasXc) return 3;
+
+  // Group 4: contains 'duoi'/'dui' but NOT 'xc'
+  if (hasDuoi && !hasXc) return 4;
+
+  // Group 5: xcdau / xdau / xc + dau
+  if (hasXcDau) return 5;
+  if (hasXc && hasDau) return 5;
+
+  // Group 6: xcduoi / xcdui / xc + duoi / xc + dui
+  if (hasXcDuoi) return 6;
+  if (hasXc && hasDuoi) return 6;
+
+  // Group 7: only 'xc' (no duoi/dui/dau)
+  if (hasXc) return 7;
+
+  // Everything else
+  return 99;
+}
+
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
   // Step 1: Check for header and extract raw content after it
@@ -304,6 +354,43 @@ function processMessage(text) {
 
   // Step 8: Replace '; ' with '/'
   result = replaceSemicolonSpace(result);
+
+  // Step 9: Split result by newline
+  const lines = result.split("\n");
+
+  // Step 10: Split each line by space → nested array
+  const nested = [];
+  for (let li = 0; li < lines.length; li++) {
+    const trimmed = lines[li].trim();
+    if (!trimmed) continue;
+    const lineParts = trimmed.split(" ").filter(function (p) { return p !== ""; });
+    if (lineParts.length > 0) {
+      nested.push(lineParts);
+    }
+  }
+
+  // Step 11: Sort by custom group order, preserving relative order within groups
+  const GROUP_ORDER = [1, 2, 3, 4, 5, 6, 7, 99];
+  const lineGroups = {};
+  for (let ni = 0; ni < nested.length; ni++) {
+    const g = getLineGroup(nested[ni]);
+    if (!lineGroups[g]) lineGroups[g] = [];
+    lineGroups[g].push(nested[ni]);
+  }
+
+  const resultParts = [];
+  for (let gi = 0; gi < GROUP_ORDER.length; gi++) {
+    const gid = GROUP_ORDER[gi];
+    if (lineGroups[gid] && lineGroups[gid].length > 0) {
+      const groupLines = [];
+      for (let gj = 0; gj < lineGroups[gid].length; gj++) {
+        groupLines.push(lineGroups[gid][gj].join(" "));
+      }
+      resultParts.push(groupLines.join("\n"));
+    }
+  }
+
+  result = resultParts.join("\n\n");
 
   return result;
 }
