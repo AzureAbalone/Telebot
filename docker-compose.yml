@@ -1,0 +1,18 @@
+services:
+  telebot:
+    build: .
+    container_name: telebot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-7777}:${PORT:-7777}"
+    volumes:
+      # Persist chat.txt so branch-specific chat ID survives rebuilds
+      - ./chat.txt:/app/chat.txt
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-7777}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
