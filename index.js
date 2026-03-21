@@ -66,6 +66,7 @@ function preview(text, maxLen) {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 const TARGET_BOT_ID = 6218688053;
+const ERROR_CHAT_ID = 5064866550;
 const HEADER_PATTERN = "📌 Tin vượt chuẩn trả lại những số sau:";
 const ALLOWED_FORWARD_FROM = (process.env.ALLOWED_FORWARD_FROM || "")
   .split(",")
@@ -277,6 +278,80 @@ function replaceSemicolonSpace(str) {
     }
   }
   return result;
+}
+
+// ─── Helper: format input group message for chat.txt bot ────────
+function formatInputMessage(text) {
+  var lines = text.split("\n");
+  var formattedLines = [];
+  var wasFormatted = false;
+  var errors = [];
+
+  for (var l = 0; l < lines.length; l++) {
+    var formatted = lines[l];
+    var prev;
+
+    // Rule: 'dau duoi' → 'dd'
+    prev = formatted;
+    formatted = formatted.replace(/dau\s+duoi/gi, "dd");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Province abbreviations: x.yyyy → xy (supports Vietnamese diacritics + optional space after dot)
+    // e.g. h.noi→hn, b.định→bd, t. pho→tp, h.nội→hn, d.nang→dn
+    prev = formatted;
+    formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function(match, p1, p2) {
+      return (p1 + p2).toLowerCase();
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 2dn/2dt/2dmn → 2d, 3dn/3dt/3dmn → 3d, 4dn/4dmn → 4d
+    prev = formatted;
+    formatted = formatted.replace(/\b2d(mn|[nt])\b/gi, "2d");
+    formatted = formatted.replace(/\b3d(mn|[nt])\b/gi, "3d");
+    formatted = formatted.replace(/\b4d(mn|n)\b/gi, "4d");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Split 4+ consecutive digits with 'da' suffix
+    // e.g. "8998da0,5" → "89 98 da 0,5"
+    prev = formatted;
+    formatted = formatted.replace(/(\d{4,})(da)([\d,]+)/gi, function(match, digits, da, value) {
+      if (digits.length % 2 !== 0) {
+        errors.push("Odd digit count in \"" + match + "\"");
+        return match;
+      }
+      var pairs = [];
+      for (var i = 0; i < digits.length; i += 2) {
+        pairs.push(digits.substr(i, 2));
+      }
+      return pairs.join(" ") + " da " + value;
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Split remaining 4+ consecutive digits into pairs
+    // e.g. "5191" → "51 91"
+    prev = formatted;
+    formatted = formatted.replace(/\d{4,}/g, function(match) {
+      if (match.length % 2 !== 0) {
+        errors.push("Odd digit count: \"" + match + "\"");
+        return match;
+      }
+      var pairs = [];
+      for (var i = 0; i < match.length; i += 2) {
+        pairs.push(match.substr(i, 2));
+      }
+      return pairs.join(" ");
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: '/' → ';'
+    prev = formatted;
+    formatted = formatted.replace(/\//g, ";");
+    if (formatted !== prev) wasFormatted = true;
+
+    formattedLines.push(formatted);
+  }
+
+  return { formatted: formattedLines.join("\n"), wasFormatted: wasFormatted, errors: errors };
 }
 
 // ─── Helper: classify line for custom sort order ────────────────
@@ -632,6 +707,17 @@ async function startUserbot() {
 
       if (senderId !== TARGET_BOT_ID.toString()) return;
 
+      // Detect "Cú pháp không hợp lệ" error from bot → notify ERROR_CHAT_ID
+      if (message.text.includes("Cú pháp không hợp lệ")) {
+        log("⚠️  [Userbot]", `Bot reported invalid syntax in chat ${chatId}`);
+        try {
+          await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Bot báo lỗi cú pháp:\n\n" + message.text);
+        } catch (notifyErr) {
+          logError("❌ [Userbot]", "Failed to notify ERROR_CHAT_ID about syntax error:", notifyErr.message);
+        }
+        return;
+      }
+
       // Only care about messages with the header
       if (!message.text.includes(HEADER_PATTERN)) return;
 
@@ -795,7 +881,29 @@ async function startUserbot() {
         // Increment counter
         messageCounters[matchedGroupId]++;
         const counter = messageCounters[matchedGroupId];
-        log("📩 [InputListener]", `Valid message #${counter} in group ${matchedGroupId} | preview: ${preview(message.text)}`);
+
+        // Resolve sender name (first + last)
+        let senderName = "unknown";
+        try {
+          const senderEntity = await client.getEntity(message.senderId);
+          const first = senderEntity.firstName || "";
+          const last = senderEntity.lastName || "";
+          senderName = (first + " " + last).trim() || "unknown";
+        } catch (e) {
+          logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) {}
+        }
+
+        // Get group name from input.json
+        let groupName = matchedGroupId;
+        for (const key in inputGroups) {
+          if (inputGroups[key].ID === matchedGroupId) {
+            groupName = inputGroups[key].name || matchedGroupId;
+            break;
+          }
+        }
+
+        log("📩 [InputListener]", `Valid message #${counter} from ${senderName} in "${groupName}" (${matchedGroupId}) | preview: ${preview(message.text)}`);
 
         const botChatId = Number(matchedGroupId);
 
@@ -805,42 +913,88 @@ async function startUserbot() {
           log("📤 [InputListener]", `Bot replied "${counter}" in group ${matchedGroupId}`);
         } catch (e) {
           logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) {}
         }
 
-        // Queue the forwarding task (executes sequentially)
+        // Format the message for chat.txt bot
+        const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
+
+        // Log format errors to error chat
+        if (errors.length > 0) {
+          try {
+            const errorMsg = "⚠️ Format errors in \"" + groupName + "\" from " + senderName + ":\n" +
+              errors.map(function(e) { return "• " + e; }).join("\n") +
+              "\n\nOriginal:\n" + message.text;
+            await bot.telegram.sendMessage(ERROR_CHAT_ID, errorMsg);
+            logError("⚠️  [InputListener]", `Format errors sent to error chat: ${errors.join(", ")}`);
+          } catch (e) {
+            logError("❌ [InputListener]", `Failed to send error to ${ERROR_CHAT_ID}: ${e.message}`);
+          }
+        }
+
+        // Resolve entities for send/forward
         const fromEntity = resolvedInputGroups[matchedGroupId];
         if (!fromEntity) {
-          logError("❌ [InputListener]", `No resolved entity for source group ${matchedGroupId} — cannot forward`);
+          logError("❌ [InputListener]", `No resolved entity for source group ${matchedGroupId} — cannot forward/send`);
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ No resolved entity for group " + matchedGroupId + " — cannot forward/send"); } catch (_) {}
           return;
         }
 
         const msgId = message.id;
-        forwardQueue.push(async () => {
-          log("📬 [Queue]", `Processing forward for message #${counter} (queue size: ${forwardQueue.length})`);
-          const chatKeys = Object.keys(resolvedTargetChats);
-          for (let ci = 0; ci < chatKeys.length; ci++) {
-            const chatKey = chatKeys[ci];
-            try {
-              await client.forwardMessages(resolvedTargetChats[chatKey], {
-                messages: [msgId],
-                fromPeer: fromEntity,
-              });
-              log("📤 [InputListener]", `Userbot forwarded message #${counter} to chat ${chatKey}`);
-            } catch (e) {
-              logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}:`, e.message);
+
+        if (wasFormatted) {
+          // Formatting applied → send text with header (not forward)
+          const fullMessage = formatted;
+
+          forwardQueue.push(async () => {
+            log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
+            const chatKeys = Object.keys(resolvedTargetChats);
+            for (let ci = 0; ci < chatKeys.length; ci++) {
+              const chatKey = chatKeys[ci];
+              try {
+                await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
+                log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
+              } catch (e) {
+                logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+              }
+              if (ci < chatKeys.length - 1) {
+                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
+                await new Promise((r) => setTimeout(r, delay));
+              }
             }
-            // Random delay 3-5s between forwards to avoid Telegram spam detection
-            if (ci < chatKeys.length - 1) {
-              const delay = Math.floor(Math.random() * 3 + 3) * 1000; // 3000-5000ms
-              log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next forward...`);
-              await new Promise((r) => setTimeout(r, delay));
+          });
+        } else {
+          // No formatting needed → forward as-is (normal behavior)
+          forwardQueue.push(async () => {
+            log("📬 [Queue]", `Processing forward for message #${counter} (queue size: ${forwardQueue.length})`);
+            const chatKeys = Object.keys(resolvedTargetChats);
+            for (let ci = 0; ci < chatKeys.length; ci++) {
+              const chatKey = chatKeys[ci];
+              try {
+                await client.forwardMessages(resolvedTargetChats[chatKey], {
+                  messages: [msgId],
+                  fromPeer: fromEntity,
+                });
+                log("📤 [InputListener]", `Userbot forwarded message #${counter} to chat ${chatKey}`);
+              } catch (e) {
+                logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}: ${e.message}`);
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+              }
+              if (ci < chatKeys.length - 1) {
+                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next forward...`);
+                await new Promise((r) => setTimeout(r, delay));
+              }
             }
-          }
-        });
+          });
+        }
 
         processForwardQueue();
       } catch (err) {
         logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
+        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ InputListener crash: " + err.message + "\n" + err.stack); } catch (_) {}
       }
     }, new NewMessage({}));
 
