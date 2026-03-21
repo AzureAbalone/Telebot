@@ -365,8 +365,8 @@ function processMessage(text) {
     }
   }
 
-  // Step 5: Sort the object keys alphabetically ascending
-  const sortedKeys = Object.keys(grouped).sort();
+  // Step 5: Preserve original key order (no alphabetical sort — only group-based sort in Step 11)
+  const sortedKeys = Object.keys(grouped);
 
   if (sortedKeys.length === 0) return null;
 
