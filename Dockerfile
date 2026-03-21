@@ -17,6 +17,7 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy application files
 COPY package.json ./
 COPY index.js ./
+COPY input.json ./
 COPY chat.txt ./
 
 # Own files by non-root user
