@@ -296,9 +296,13 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: Province abbreviations: x.yyyy → xy (supports Vietnamese diacritics + optional space after dot)
-    // e.g. h.noi→hn, b.định→bd, t. pho→tp, h.nội→hn, d.nang→dn
+    // Rule: Province abbreviations
+    // 1) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
+    // 2) ASCII letter + dot + word → first two letters (e.g. h.noi→hn, t. pho→tp)
     prev = formatted;
+    formatted = formatted.replace(/[đĐ][.\s]\s?([a-zA-Z])\S*/g, function(match, p1) {
+      return ("d" + p1).toLowerCase();
+    });
     formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function(match, p1, p2) {
       return (p1 + p2).toLowerCase();
     });
