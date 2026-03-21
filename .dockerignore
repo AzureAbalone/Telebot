@@ -3,3 +3,9 @@ node_modules
 .env
 .env.example
 *.md
+chat.txt
+docker-compose.yml
+.dockerignore
+.gitignore
+reports/
+.gemini/

@@ -1,33 +1,27 @@
-# ─── Stage 1: Install dependencies ───────────────────────────────
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-
-# ─── Stage 2: Production image ──────────────────────────────────
+# ─── Optimized for fast builds on Render ─────────────────────────
+# Layer order: base → deps (cached) → app code (changes often)
 FROM node:20-alpine
+
 WORKDIR /app
 
-# Security: run as non-root
+# 1. Security: create non-root user first (rarely changes → cached)
 RUN addgroup -S telebot && adduser -S telebot -G telebot
 
-# Copy dependencies from stage 1
-COPY --from=deps /app/node_modules ./node_modules
+# 2. Dependencies layer: only re-runs when package*.json changes
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy application files
-COPY package.json ./
+# 3. Application code: changes most often → last layer
 COPY index.js ./
-COPY chat.txt ./
 
-# Own files by non-root user
+# 4. Ensure non-root ownership
 RUN chown -R telebot:telebot /app
 USER telebot
 
-# Health check (uses the PORT env var, default 7777)
+# 5. Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:${PORT:-7777}/health || exit 1
 
-# Expose health check port
 EXPOSE ${PORT:-7777}
 
 CMD ["node", "index.js"]
