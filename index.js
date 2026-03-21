@@ -360,11 +360,28 @@ function processMessage(text) {
 
   // Step 3b: Further split segments at 'n' boundaries (not 'tn')
   // e.g. "11 dd 360n 49 67 79 dd 10n" → ["11 dd 360n", "49 67 79 dd 10n"]
+  // EXCEPTION: if a raw segment contains BOTH lo/b AND dd, do NOT split — keep as one line
   const segments = [];
   for (let rs = 0; rs < rawSegments.length; rs++) {
     const seg = rawSegments[rs].trim();
     if (!seg) continue;
     const words = seg.split(" ").filter(function (w) { return w !== ""; });
+
+    // Check if this segment has both lo/b AND dd → if so, skip n-splitting
+    var segHasLoOrB = false;
+    var segHasDd = false;
+    for (let chk = 0; chk < words.length; chk++) {
+      var chkLower = words[chk].toLowerCase();
+      if (chkLower === "lo" || chkLower === "b") segHasLoOrB = true;
+      if (chkLower === "dd") segHasDd = true;
+    }
+
+    if (segHasLoOrB && segHasDd) {
+      // Don't split at n boundaries — keep entire segment as one line
+      segments.push(words.join(" "));
+      continue;
+    }
+
     var current = [];
     for (let w = 0; w < words.length; w++) {
       current.push(words[w]);
