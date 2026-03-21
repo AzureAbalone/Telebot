@@ -11,8 +11,9 @@ RUN addgroup -S telebot && adduser -S telebot -G telebot
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# 3. Application code: changes most often → last layer
+# 3. Application code: changes most often → last layers
 COPY index.js input.json ./
+COPY chat.txt ./
 
 # 4. Ensure non-root ownership
 RUN chown -R telebot:telebot /app
