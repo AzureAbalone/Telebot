@@ -303,8 +303,13 @@ function processMessage(text) {
     for (let w = 0; w < words.length; w++) {
       current.push(words[w]);
       var lower = words[w].toLowerCase();
-      // If word ends in 'n' and isn't exactly 'tn', this ends the current entry
-      if (lower.length > 0 && lower[lower.length - 1] === "n" && lower !== "tn") {
+      // If word ends in 'n', isn't exactly 'tn', and contains a digit → this ends the current entry
+      // e.g. "8n", "360n", "0.5n" split — but "dn", "qn" do NOT split
+      var hasDigit = false;
+      for (var di = 0; di < lower.length; di++) {
+        if (lower[di] >= "0" && lower[di] <= "9") { hasDigit = true; break; }
+      }
+      if (lower.length > 0 && lower[lower.length - 1] === "n" && lower !== "tn" && hasDigit) {
         segments.push(current.join(" "));
         current = [];
       }
