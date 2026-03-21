@@ -834,7 +834,7 @@ async function startUserbot() {
       } catch (err) {
         logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
       }
-    }, new NewMessage({}));
+    }, new NewMessage({ incoming: true, outgoing: true }));
 
     log("👁️  [InputListener]", `Listening to ${inputGroupIds.length} input group(s)`);
 
