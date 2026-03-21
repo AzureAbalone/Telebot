@@ -341,7 +341,10 @@ function processMessage(text) {
 
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
-      transformedValues.push(replaceLoWithB(values[v]));
+      let tv = replaceLoWithB(values[v]);
+      if (tv === "dn") tv = "dnang";
+      if (tv === "qn") tv = "qngai";
+      transformedValues.push(tv);
     }
 
     // Special rule: if key is "ag" and first value is "tn", combine into "2d"
