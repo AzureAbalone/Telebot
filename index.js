@@ -396,6 +396,10 @@ function processMessage(text) {
 
     let transformedKey = replaceLoWithB(rawKey);
 
+    // Rename short keys: dn → dnang, qn → qngai
+    if (transformedKey === "dn") transformedKey = "dnang";
+    if (transformedKey === "qn") transformedKey = "qngai";
+
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
       transformedValues.push(replaceLoWithB(values[v]));
