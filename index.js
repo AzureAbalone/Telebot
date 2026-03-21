@@ -158,7 +158,7 @@ function isQuietPeriod() {
   // 17:15 - 17:30
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 30) return true;
   // 18:15 - 18:30
-  if (vnTime >= 18 * 60 + 15 && vnTime <= 23 * 60 + 59) return true;
+  if (vnTime >= 18 * 60 + 15 && vnTime <= 18 * 60 + 59) return true;
 
   return false;
 }
@@ -678,6 +678,11 @@ async function startUserbot() {
     }
   }
 
+  // Get the userbot's own ID
+  const me = await client.getMe();
+  const userbotSelfId = me.id.toString();
+  log("👁️  [Userbot]", `Userbot self ID: ${userbotSelfId}`);
+
   if (inputGroupIds.length > 0) {
     // Get bot's own ID to ignore its replies (prevent loops)
     const botInfo = await bot.telegram.getMe();
@@ -759,6 +764,9 @@ async function startUserbot() {
         // Ignore messages from the bot itself (counter replies)
         if (senderId === botSelfId.toString()) return;
 
+        // Ignore outgoing messages from userbot itself
+        if (message.out || senderId === userbotSelfId) return;
+
         // Check if this message is from an input.json group
         let matchedGroupId = null;
         for (let i = 0; i < inputGroupIds.length; i++) {
@@ -834,7 +842,7 @@ async function startUserbot() {
       } catch (err) {
         logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
       }
-    }, new NewMessage({ incoming: true, outgoing: true }));
+    }, new NewMessage({}));
 
     log("👁️  [InputListener]", `Listening to ${inputGroupIds.length} input group(s)`);
 
