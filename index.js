@@ -8,18 +8,37 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 
-// ─── Logger ───────────────────────────────────────────────────────
-function vnTimestamp() {
-  const now = new Date();
-  return now.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
+const pino = require("pino");
+
+// ─── Logger (Pino + custom compact output) ────────────────────────
+const levelColors = { 30: "\x1b[32m", 40: "\x1b[33m", 50: "\x1b[31m", 60: "\x1b[35m" };
+const levelNames = { 30: "INFO", 40: "WARN", 50: "ERROR", 60: "FATAL" };
+const R = "\x1b[0m", DIM = "\x1b[2m", BOLD = "\x1b[1m", ID_HL = "\x1b[1;97;44m";
+
+function highlightIds(msg, fallbackColor) {
+  return msg.replace(/-?\d{7,}/g, (id) => `${ID_HL} ${id} ${R}${fallbackColor}`);
 }
 
+const logger = pino({ level: "info" }, {
+  write(str) {
+    try {
+      const o = JSON.parse(str);
+      const d = new Date(o.time);
+      const t = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+      const c = levelColors[o.level] || "";
+      const n = levelNames[o.level] || "LOG";
+      const msg = highlightIds(o.msg || "", c);
+      process.stdout.write(`${DIM}${t}${R} ${c}${BOLD}${n}${R} ${o.tag || ""} ${c}${msg}${R}\n`);
+    } catch { process.stdout.write(str); }
+  },
+});
+
 function log(tag, ...args) {
-  console.log(`[${vnTimestamp()}] ${tag}`, ...args);
+  logger.info({ tag }, args.join(" "));
 }
 
 function logError(tag, ...args) {
-  console.error(`[${vnTimestamp()}] ${tag}`, ...args);
+  logger.error({ tag }, args.join(" "));
 }
 
 function userLabel(from) {
@@ -58,6 +77,7 @@ const API_HASH = process.env.API_HASH;
 const SESSION_STRING = process.env.SESSION_STRING || "";
 
 const CHAT_FILE = path.join(__dirname, "chat.txt");
+const INPUT_FILE = path.join(__dirname, "input.json");
 const PORT = process.env.PORT || 3000;
 
 // ─── Health check server (for cron jobs) ───────────────────────────
@@ -106,6 +126,52 @@ function loadChatIds() {
     logError("❌ [Config]", "Error loading chat.txt:", err.message);
     return [];
   }
+}
+
+// ─── Load input.json groups ──────────────────────────────────────
+function loadInputGroups() {
+  try {
+    if (!fs.existsSync(INPUT_FILE)) {
+      log("📄 [Config]", "input.json not found — input group listener disabled.");
+      return {};
+    }
+    const content = fs.readFileSync(INPUT_FILE, "utf-8");
+    const groups = JSON.parse(content);
+    const count = Object.keys(groups).length;
+    log("📄 [Config]", `Loaded ${count} input group(s) from input.json`);
+    return groups;
+  } catch (err) {
+    logError("❌ [Config]", "Error loading input.json:", err.message);
+    return {};
+  }
+}
+
+// ─── Helper: check if current VN time is in quiet period ─────────
+function isQuietPeriod() {
+  const now = new Date();
+  const vnHour = (now.getUTCHours() + 7) % 24;
+  const vnMinute = now.getUTCMinutes();
+  const vnTime = vnHour * 60 + vnMinute;
+
+  // 16:15 - 16:30
+  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 30) return true;
+  // 17:15 - 17:30
+  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 30) return true;
+  // 18:15 - 18:30
+  if (vnTime >= 18 * 60 + 15 && vnTime <= 18 * 60 + 30) return true;
+
+  return false;
+}
+
+// ─── Helper: check if message is valid (not just dots/empty) ─────
+function isValidInputMessage(text) {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i] !== ".") return true;
+  }
+  return false; // all dots
 }
 
 // ─── Helper: escape HTML special chars ────────────────────────────
@@ -565,6 +631,181 @@ async function startUserbot() {
   }, new NewMessage({ fromUsers: [TARGET_BOT_ID] }));
 
   log("👁️  [Userbot]", `Monitoring for messages from bot ${TARGET_BOT_ID}`);
+
+  // ─── Input Group Listener (standalone) ────────────────────────────
+  const inputGroups = loadInputGroups();
+  const inputGroupIds = []; // normalized IDs from input.json
+  const messageCounters = {}; // per-group counters
+
+  for (const name in inputGroups) {
+    const id = inputGroups[name].ID;
+    if (id) {
+      inputGroupIds.push(id.toString());
+      messageCounters[id.toString()] = 0;
+      const label = inputGroups[name].name || name;
+      log("👁️  [InputListener]", `Monitoring input group "${label}" (ID: ${id})`);
+    }
+  }
+
+  if (inputGroupIds.length > 0) {
+    // Get bot's own ID to ignore its replies (prevent loops)
+    const botInfo = await bot.telegram.getMe();
+    const botSelfId = botInfo.id;
+    log("👁️  [InputListener]", `Bot self ID: ${botSelfId} — will ignore own messages`);
+
+    // Resolve only the specific groups we need (no bulk dialog fetch)
+    const { Api } = require("telegram/tl");
+
+    // Pre-resolve input.json group entities (for fromPeer when forwarding)
+    const resolvedInputGroups = {};
+    for (let i = 0; i < inputGroupIds.length; i++) {
+      try {
+        const channelId = BigInt(inputGroupIds[i].toString().replace(/^-100/, ""));
+        const entity = await client.getEntity(new Api.PeerChannel({ channelId }));
+        resolvedInputGroups[inputGroupIds[i]] = entity;
+        log("✅ [InputListener]", `Resolved input group entity: ${inputGroupIds[i]}`);
+      } catch (e) {
+        logError("❌ [InputListener]", `Failed to resolve input group ${inputGroupIds[i]}:`, e.message);
+      }
+    }
+
+    // Pre-resolve chat.txt entities (for target when forwarding)
+    const resolvedTargetChats = {};
+    const chatIds = loadChatIds();
+    for (let t = 0; t < chatIds.length; t++) {
+      try {
+        const channelId = BigInt(chatIds[t].toString().replace(/^-100/, ""));
+        const entity = await client.getEntity(new Api.PeerChannel({ channelId }));
+        resolvedTargetChats[chatIds[t]] = entity;
+        log("✅ [InputListener]", `Resolved chat.txt entity: ${chatIds[t]}`);
+      } catch (e) {
+        logError("❌ [InputListener]", `Failed to resolve chat ${chatIds[t]}:`, e.message);
+      }
+    }
+
+    // === Forward Queue — process messages one at a time ===
+    const forwardQueue = [];
+    let isProcessingQueue = false;
+
+    async function processForwardQueue() {
+      if (isProcessingQueue) return;
+      isProcessingQueue = true;
+      while (forwardQueue.length > 0) {
+        const task = forwardQueue.shift();
+        try {
+          await task();
+        } catch (e) {
+          logError("❌ [Queue]", "Error processing queued task:", e.message);
+        }
+      }
+      isProcessingQueue = false;
+    }
+
+    client.addEventHandler(async (event) => {
+      try {
+        const message = event.message;
+        if (!message || !message.text) return;
+
+        const chatId = (message.chatId || message.peerId).toString();
+        const senderId = message.senderId?.toString();
+
+        // Ignore messages from the bot itself (counter replies)
+        if (senderId === botSelfId.toString()) return;
+
+        // Check if this message is from an input.json group
+        let matchedGroupId = null;
+        for (let i = 0; i < inputGroupIds.length; i++) {
+          const gid = inputGroupIds[i];
+          // input.json has "-100xxxx", GramJS might give "xxxx" without -100
+          if (chatId === gid || "-100" + chatId === gid || chatId === gid.replace(/^-100/, "")) {
+            matchedGroupId = gid;
+            break;
+          }
+        }
+
+        if (!matchedGroupId) return;
+
+        // Check quiet period
+        if (isQuietPeriod()) {
+          log("🔇 [InputListener]", `Quiet period — skipping message in group ${matchedGroupId}`);
+          return;
+        }
+
+        // Check if message is valid (not just dots)
+        if (!isValidInputMessage(message.text)) {
+          log("⏭️  [InputListener]", `Invalid message (dots only) in group ${matchedGroupId} — skipped`);
+          return;
+        }
+
+        // Increment counter
+        messageCounters[matchedGroupId]++;
+        const counter = messageCounters[matchedGroupId];
+        log("📩 [InputListener]", `Valid message #${counter} in group ${matchedGroupId} | preview: ${preview(message.text)}`);
+
+        const botChatId = Number(matchedGroupId);
+
+        // Bot replies with counter in the same input group
+        try {
+          await bot.telegram.sendMessage(botChatId, `${counter}`);
+          log("📤 [InputListener]", `Bot replied "${counter}" in group ${matchedGroupId}`);
+        } catch (e) {
+          logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
+        }
+
+        // Queue the forwarding task (executes sequentially)
+        const fromEntity = resolvedInputGroups[matchedGroupId];
+        if (!fromEntity) {
+          logError("❌ [InputListener]", `No resolved entity for source group ${matchedGroupId} — cannot forward`);
+          return;
+        }
+
+        const msgId = message.id;
+        forwardQueue.push(async () => {
+          log("📬 [Queue]", `Processing forward for message #${counter} (queue size: ${forwardQueue.length})`);
+          const chatKeys = Object.keys(resolvedTargetChats);
+          for (let ci = 0; ci < chatKeys.length; ci++) {
+            const chatKey = chatKeys[ci];
+            try {
+              await client.forwardMessages(resolvedTargetChats[chatKey], {
+                messages: [msgId],
+                fromPeer: fromEntity,
+              });
+              log("📤 [InputListener]", `Userbot forwarded message #${counter} to chat ${chatKey}`);
+            } catch (e) {
+              logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}:`, e.message);
+            }
+            // Random delay 3-5s between forwards to avoid Telegram spam detection
+            if (ci < chatKeys.length - 1) {
+              const delay = Math.floor(Math.random() * 3 + 3) * 1000; // 3000-5000ms
+              log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next forward...`);
+              await new Promise((r) => setTimeout(r, delay));
+            }
+          }
+        });
+
+        processForwardQueue();
+      } catch (err) {
+        logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
+      }
+    }, new NewMessage({}));
+
+    log("👁️  [InputListener]", `Listening to ${inputGroupIds.length} input group(s)`);
+
+    // Reset counters daily at midnight VN time
+    let lastResetDay = -1;
+    setInterval(() => {
+      const now = new Date();
+      const vnHour = (now.getUTCHours() + 7) % 24;
+      const vnDay = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCDate();
+      if (vnHour === 0 && lastResetDay !== vnDay) {
+        lastResetDay = vnDay;
+        for (const gid in messageCounters) {
+          messageCounters[gid] = 0;
+        }
+        log("🔄 [InputListener]", "Counters reset at midnight VN time");
+      }
+    }, 60000); // check every 60s
+  }
 
   // Keep-alive: ping Telegram periodically to prevent TIMEOUT
   setInterval(async () => {
