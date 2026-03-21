@@ -388,6 +388,7 @@ function processMessage(text) {
 
   // Step 4: For each instance, split by ' ' → first item is key, rest are values
   const grouped = {};
+  const keyOrder = []; // Track insertion order (Object.keys reorders numeric keys!)
 
   for (let s = 0; s < segments.length; s++) {
     const segment = segments[s].trim();
@@ -425,14 +426,15 @@ function processMessage(text) {
     // Accumulate into grouped object: { key: [[val1, val2], [val3, val4], ...] }
     if (!grouped[finalKey]) {
       grouped[finalKey] = [];
+      keyOrder.push(finalKey); // Only push on first occurrence to preserve original order
     }
     if (transformedValues.length > 0) {
       grouped[finalKey].push(transformedValues);
     }
   }
 
-  // Step 5: Preserve original key order (no alphabetical sort — only group-based sort in Step 11)
-  const sortedKeys = Object.keys(grouped);
+  // Step 5: Use keyOrder to preserve original insertion order
+  const sortedKeys = keyOrder;
 
   if (sortedKeys.length === 0) return null;
 
