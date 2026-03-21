@@ -656,12 +656,29 @@ async function startUserbot() {
     // Resolve only the specific groups we need (no bulk dialog fetch)
     const { Api } = require("telegram/tl");
 
+    // Helper: resolve a Telegram entity from a raw ID string (handles channels, groups, users/bots)
+    async function resolveEntity(rawId) {
+      const idStr = rawId.toString();
+      if (idStr.startsWith("-100")) {
+        // Supergroup / Channel
+        const channelId = BigInt(idStr.slice(4)); // remove "-100"
+        return await client.getEntity(new Api.PeerChannel({ channelId }));
+      } else if (idStr.startsWith("-")) {
+        // Legacy group chat (negative, no -100 prefix)
+        const chatId = BigInt(idStr.slice(1)); // remove "-"
+        return await client.getEntity(new Api.PeerChat({ chatId }));
+      } else {
+        // User / Bot (positive ID)
+        const userId = BigInt(idStr);
+        return await client.getEntity(new Api.PeerUser({ userId }));
+      }
+    }
+
     // Pre-resolve input.json group entities (for fromPeer when forwarding)
     const resolvedInputGroups = {};
     for (let i = 0; i < inputGroupIds.length; i++) {
       try {
-        const channelId = BigInt(inputGroupIds[i].toString().replace(/^-100/, ""));
-        const entity = await client.getEntity(new Api.PeerChannel({ channelId }));
+        const entity = await resolveEntity(inputGroupIds[i]);
         resolvedInputGroups[inputGroupIds[i]] = entity;
         log("✅ [InputListener]", `Resolved input group entity: ${inputGroupIds[i]}`);
       } catch (e) {
@@ -674,8 +691,7 @@ async function startUserbot() {
     const chatIds = loadChatIds();
     for (let t = 0; t < chatIds.length; t++) {
       try {
-        const channelId = BigInt(chatIds[t].toString().replace(/^-100/, ""));
-        const entity = await client.getEntity(new Api.PeerChannel({ channelId }));
+        const entity = await resolveEntity(chatIds[t]);
         resolvedTargetChats[chatIds[t]] = entity;
         log("✅ [InputListener]", `Resolved chat.txt entity: ${chatIds[t]}`);
       } catch (e) {
