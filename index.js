@@ -916,14 +916,16 @@ async function startUserbot() {
 
         // Resolve sender name (first + last)
         let senderName = "unknown";
-        try {
-          const senderEntity = await client.getEntity(message.senderId);
-          const first = senderEntity.firstName || "";
-          const last = senderEntity.lastName || "";
-          senderName = (first + " " + last).trim() || "unknown";
-        } catch (e) {
-          logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) {}
+        if (message.senderId) {
+          try {
+            const senderEntity = await client.getEntity(message.senderId);
+            const first = senderEntity.firstName || "";
+            const last = senderEntity.lastName || "";
+            senderName = (first + " " + last).trim() || "unknown";
+          } catch (e) {
+            logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
+            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) {}
+          }
         }
 
         // Get group name from input.json
