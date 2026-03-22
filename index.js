@@ -319,22 +319,53 @@ function formatInputMessage(text) {
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Province abbreviations
-    // 1) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
-    // 2) ASCII letter + dot + word → first two letters (e.g. h.noi→hn, t. pho→tp)
+    // 1) Specific common full-name provinces
+    prev = formatted;
+    formatted = formatted.replace(/\b(ha\s*noi|hanoi|hnoi)\b/gi, "hn");
+    formatted = formatted.replace(/\b(hai\s*phong|hphong)\b/gi, "hp");
+    formatted = formatted.replace(/\b(ho\s*chi\s*minh|hcm)\b/gi, "hcm");
+    formatted = formatted.replace(/\b(da\s*nang|dnang)\b/gi, "dnang");
+    formatted = formatted.replace(/\b(kon\s*tum|kontum)\b/gi, "kt");
+    formatted = formatted.replace(/\b(khanh\s*hoa|khanhhoa)\b/gi, "kh");
+    formatted = formatted.replace(/\b(binh\s*duong|bduong)\b/gi, "bd");
+    formatted = formatted.replace(/\b(binh\s*dinh|bdinh)\b/gi, "bdi");
+    formatted = formatted.replace(/\b(binh\s*phuoc|bphuoc)\b/gi, "bp");
+    formatted = formatted.replace(/\b(binh\s*thuan|bthuan)\b/gi, "bth");
+    formatted = formatted.replace(/\b(quang\s*ngai|qngai)\b/gi, "qngai");
+    formatted = formatted.replace(/\b(quang\s*nam|qnam)\b/gi, "qna");
+    formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
+    formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
+    if (formatted !== prev) wasFormatted = true;
+
+    // 2) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
     prev = formatted;
     formatted = formatted.replace(/[đĐ][.\s]\s?([a-zA-Z])\S*/g, function (match, p1) {
       return ("d" + p1).toLowerCase();
     });
+    if (formatted !== prev) wasFormatted = true;
+
+    // 3) ASCII letter + dot + word → first two letters (e.g. h.noi→hn, t.pho→tp)
+    prev = formatted;
     formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function (match, p1, p2) {
       return (p1 + p2).toLowerCase();
     });
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: 2dn/2dt/2dmn/2mn/2mt → 2d, 3dn/3dt/3dmn/3mn/3mt → 3d, 4dn/4dmn/4mn → 4d
+    // 4) Single letter + space + word → first two letters (e.g. k tum→kt, k hoa→kh, h noi→hn)
     prev = formatted;
-    formatted = formatted.replace(/\b2d(mn|[nt])\b/gi, "2d");
-    formatted = formatted.replace(/\b3d(mn|[nt])\b/gi, "3d");
-    formatted = formatted.replace(/\b4d(mn|n)\b/gi, "4d");
+    formatted = formatted.replace(/\b([a-zA-Z])\s+([a-zA-Z])\S*/gi, function (match, p1, p2) {
+      // Only match if first part is a single letter (not a known keyword)
+      if (/^(b|dd|da|lo|xc)$/i.test(p1)) return match; // skip bet keywords
+      return (p1 + p2).toLowerCase();
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 2d/3d/4d suffix stripping (with or without space)
+    // Handles: 2dn, 2dt, 2dmn, 2dmt, 2dmnt, 2d n, 2d t, 2mn, 2mt → 2d (same for 3d, 4d)
+    prev = formatted;
+    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|[nt])\b/gi, "2d");
+    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|[nt])\b/gi, "3d");
+    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|[nt])\b/gi, "4d");
     formatted = formatted.replace(/\b2m[nt]\b/gi, "2d");
     formatted = formatted.replace(/\b3m[nt]\b/gi, "3d");
     formatted = formatted.replace(/\b4mn\b/gi, "4d");
