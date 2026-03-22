@@ -308,6 +308,11 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
+    // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
+    prev = formatted;
+    formatted = formatted.replace(/[đĐ][aáàảãạ]/g, "da");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: 'dat' → 'da'
     prev = formatted;
     formatted = formatted.replace(/\bdat\b/gi, "da");
