@@ -175,6 +175,44 @@ function isValidInputMessage(text) {
   return false; // all dots
 }
 
+// ─── Helper: check if text is a pure bet (only numbers, bet keywords, province codes) ──
+function isPureBet(text) {
+  if (!text) return false;
+  var tokens = text.split(/[\s,;\n\r\/]+/).filter(function(t) { return t.length > 0; });
+  if (tokens.length === 0) return false;
+
+  var hasBetKeyword = false;
+  var betKeywords = ['xduoidao','xdaudao','xdaodau','xdaodui','xdaoduoi','daoxcdui','daoxcdau','xcdaodui','xcdaodau','xcduoi','xcdui','xcdau','xdau','xduoi','xdui','dd','dau','duoi','dui','xc','da','lo','b'];
+
+  for (var i = 0; i < tokens.length; i++) {
+    var token = tokens[i].toLowerCase();
+
+    // Pure number (digits, optional decimal, optional trailing n)
+    if (/^\d+([.,]\d+)?n?$/.test(token)) continue;
+
+    // Known bet keyword
+    if (betKeywords.indexOf(token) >= 0) {
+      hasBetKeyword = true;
+      continue;
+    }
+
+    // Short alphanumeric code (1-4 chars with at least one letter) — province codes like dn, hn, tp, 2d, 3d, 4d
+    if (/^[a-z0-9]{1,4}$/.test(token) && /[a-z]/.test(token)) continue;
+
+    // Mixed number+keyword not yet separated (e.g. 785xdau100, 12dau50)
+    var alpha = token.replace(/[\d.,]/g, '');
+    if (alpha && betKeywords.indexOf(alpha) >= 0) {
+      hasBetKeyword = true;
+      continue;
+    }
+
+    // Unknown token — not a pure bet
+    return false;
+  }
+
+  return hasBetKeyword;
+}
+
 // ─── Helper: escape HTML special chars ────────────────────────────
 function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -925,9 +963,9 @@ async function startUserbot() {
         // Format the message for chat.txt bot
         const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
 
-        // Only reply with counter if message matches a known bet format
-        if (!wasFormatted) {
-          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" does not match bet format — skipping reply & forward`);
+        // Only reply with counter if message is a pure bet (no conversation mixed in)
+        if (!isPureBet(formatted)) {
+          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" is not a pure bet — skipping reply & forward`);
           messageCounters[matchedGroupId]--; // revert counter since it's not a valid bet
           return;
         }
