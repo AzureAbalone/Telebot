@@ -854,8 +854,19 @@ async function startUserbot() {
         // Ignore messages from the bot itself (counter replies)
         if (senderId === botSelfId.toString()) return;
 
-        // Ignore outgoing messages from userbot itself
-        if (message.out || senderId === userbotSelfId) return;
+        // Ignore outgoing messages from userbot itself (except in no-ignore groups)
+        const NO_IGNORE_USERBOT_GROUPS = ["-1003724203074"];
+        if (message.out || senderId === userbotSelfId) {
+          let skipIgnore = false;
+          for (let i = 0; i < NO_IGNORE_USERBOT_GROUPS.length; i++) {
+            const gid = NO_IGNORE_USERBOT_GROUPS[i];
+            if (chatId === gid || "-100" + chatId === gid || chatId === gid.replace(/^-100/, "")) {
+              skipIgnore = true;
+              break;
+            }
+          }
+          if (!skipIgnore) return;
+        }
 
         // Check if this message is from an input.json group
         let matchedGroupId = null;
