@@ -159,7 +159,7 @@ function isQuietPeriod() {
   // 17:15 - 17:25
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
   // 18:15 - midnight
-  if (vnTime >= 23 * 60 + 15) return true;
+  if (vnTime >= 23 * 60 + 59) return true;
 
   return false;
 }
@@ -318,6 +318,15 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Normalize '.' separator to space
+    // Between letters: "k tum.k hoa" → "k tum k hoa"
+    // Between digit groups (3+ digits before dot): "8638.8683" → "8638 8683"
+    // Preserves decimals: "0.5", "2.5" stay unchanged (less than 3 digits before dot)
+    prev = formatted;
+    formatted = formatted.replace(/([a-zA-ZđĐ])\.([a-zA-ZđĐ])/g, "$1 $2");
+    formatted = formatted.replace(/(\d{3,})\.(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: Province abbreviations
     // 1) Specific common full-name provinces
     prev = formatted;
@@ -360,9 +369,18 @@ function formatInputMessage(text) {
     });
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Normalize đ/Đ → d in 2d/3d/4d bet-type suffixes
+    // Handles: 2đt→2dt, 3đmn→3dmn, 2 đt→2dt, đt→dt, đmn→dmn, etc.
+    prev = formatted;
+    formatted = formatted.replace(/([234])\s*[đĐ]/g, "$1d");
+    formatted = formatted.replace(/(^|[\s,;])[đĐ](mnt|mn|mt|[nt])/gm, "$1d$2");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: 2d/3d/4d suffix stripping (with or without space)
     // Handles: 2dn, 2dt, 2dmn, 2dmt, 2dmnt, 2d n, 2d t, 2mn, 2mt → 2d (same for 3d, 4d)
+    // Also: 2 dn, 2 dt, 3 dmn, 2 d → 2d, 3d (space between digit and d-suffix)
     prev = formatted;
+    formatted = formatted.replace(/\b([234])\s+d(mnt|mn|mt|[nt])?\b/gi, "$1d");
     formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|[nt])\b/gi, "2d");
     formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|[nt])\b/gi, "3d");
     formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|[nt])\b/gi, "4d");
