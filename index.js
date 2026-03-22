@@ -207,7 +207,7 @@ function getTimeSuffix() {
 
   const mnStart = 12 * 60;       // 12:00
   const mnEnd = 16 * 60 + 30;    // 16:30
-  const mtStart = 16 * 60 + 50;  // 16:50
+  const mtStart = 16 * 60 + 35;  // 16:35
   const mtEnd = 17 * 60 + 30;    // 17:30
 
   if (vnTime >= mnStart && vnTime <= mnEnd) return "mn";
@@ -317,10 +317,10 @@ function formatInputMessage(text) {
     // 1) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
     // 2) ASCII letter + dot + word → first two letters (e.g. h.noi→hn, t. pho→tp)
     prev = formatted;
-    formatted = formatted.replace(/[đĐ][.\s]\s?([a-zA-Z])\S*/g, function(match, p1) {
+    formatted = formatted.replace(/[đĐ][.\s]\s?([a-zA-Z])\S*/g, function (match, p1) {
       return ("d" + p1).toLowerCase();
     });
-    formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function(match, p1, p2) {
+    formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function (match, p1, p2) {
       return (p1 + p2).toLowerCase();
     });
     if (formatted !== prev) wasFormatted = true;
@@ -335,7 +335,7 @@ function formatInputMessage(text) {
     // Rule: Split 4+ consecutive digits with 'da' suffix
     // e.g. "8998da0,5" → "89 98 da 0,5"
     prev = formatted;
-    formatted = formatted.replace(/(\d{4,})(da)([\d,]+)/gi, function(match, digits, da, value) {
+    formatted = formatted.replace(/(\d{4,})(da)([\d,]+)/gi, function (match, digits, da, value) {
       if (digits.length % 2 !== 0) {
         errors.push("Odd digit count in \"" + match + "\"");
         return match;
@@ -352,7 +352,7 @@ function formatInputMessage(text) {
     // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
     if (/\bda\b/i.test(formatted)) {
       prev = formatted;
-      formatted = formatted.replace(/\d{4,}/g, function(match) {
+      formatted = formatted.replace(/\d{4,}/g, function (match) {
         if (match.length % 2 !== 0) {
           errors.push("Odd digit count: \"" + match + "\"");
           return match;
@@ -926,7 +926,7 @@ async function startUserbot() {
             senderName = (first + " " + last).trim() || "unknown";
           } catch (e) {
             logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
-            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) {}
+            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) { }
           }
         }
 
@@ -959,14 +959,14 @@ async function startUserbot() {
           log("📤 [InputListener]", `Bot replied "${counter}" to msg ${message.id} in group ${matchedGroupId}`);
         } catch (e) {
           logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) {}
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) { }
         }
 
         // Log format errors to error chat
         if (errors.length > 0) {
           try {
             const errorMsg = "⚠️ Format errors in \"" + groupName + "\" from " + senderName + ":\n" +
-              errors.map(function(e) { return "• " + e; }).join("\n") +
+              errors.map(function (e) { return "• " + e; }).join("\n") +
               "\n\nOriginal:\n" + message.text;
             await bot.telegram.sendMessage(ERROR_CHAT_ID, errorMsg);
             logError("⚠️  [InputListener]", `Format errors sent to error chat: ${errors.join(", ")}`);
@@ -979,7 +979,7 @@ async function startUserbot() {
         const fromEntity = resolvedInputGroups[matchedGroupId];
         if (!fromEntity) {
           logError("❌ [InputListener]", `No resolved entity for source group ${matchedGroupId} — cannot forward/send`);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ No resolved entity for group " + matchedGroupId + " — cannot forward/send"); } catch (_) {}
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ No resolved entity for group " + matchedGroupId + " — cannot forward/send"); } catch (_) { }
           return;
         }
 
@@ -1000,7 +1000,7 @@ async function startUserbot() {
                 log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
               } catch (e) {
                 logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
               }
               if (ci < chatKeys.length - 1) {
                 const delay = Math.floor(Math.random() * 3 + 3) * 1000;
@@ -1022,7 +1022,7 @@ async function startUserbot() {
                 log("📤 [InputListener]", `Userbot forwarded original message #${counter} to chat ${chatKey}`);
               } catch (e) {
                 logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
               }
               if (ci < chatKeys.length - 1) {
                 const delay = Math.floor(Math.random() * 3 + 3) * 1000;
@@ -1036,7 +1036,7 @@ async function startUserbot() {
         processForwardQueue();
       } catch (err) {
         logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
-        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ InputListener crash: " + err.message + "\n" + err.stack); } catch (_) {}
+        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ InputListener crash: " + err.message + "\n" + err.stack); } catch (_) { }
       }
     }, new NewMessage({}));
 
