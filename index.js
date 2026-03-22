@@ -154,12 +154,12 @@ function isQuietPeriod() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute;
 
-  // 16:15 - 16:30
-  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 30) return true;
-  // 17:15 - 17:30
-  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 30) return true;
-  // 18:15 - 18:30
-  if (vnTime >= 18 * 60 + 15 && vnTime <= 18 * 60 + 59) return true;
+  // 16:15 - 16:20
+  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 20) return true;
+  // 17:15 - 17:25
+  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
+  // 18:15 - midnight
+  if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
 }
@@ -173,6 +173,23 @@ function isValidInputMessage(text) {
     if (trimmed[i] !== ".") return true;
   }
   return false; // all dots
+}
+
+// ─── Helper: check if text is a pure bet (not mixed with conversation) ──
+function isPureBet(text) {
+  if (!text) return false;
+  var lower = text.toLowerCase();
+
+  // 1) Must have at least one digit (bets always contain numbers)
+  if (!/\d/.test(lower)) return false;
+
+  // 2) Must contain at least one bet keyword (including Vietnamese đ variants)
+  if (!/(dau|duoi|dui|dao|dd|xc|xd|da|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d)/i.test(lower)) return false;
+
+  // 3) Reject if contains Vietnamese conversation words
+  if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
+
+  return true;
 }
 
 // ─── Helper: escape HTML special chars ────────────────────────────
@@ -190,7 +207,7 @@ function getTimeSuffix() {
 
   const mnStart = 12 * 60;       // 12:00
   const mnEnd = 16 * 60 + 30;    // 16:30
-  const mtStart = 16 * 60 + 50;  // 16:50
+  const mtStart = 16 * 60 + 35;  // 16:35
   const mtEnd = 17 * 60 + 30;    // 17:30
 
   if (vnTime >= mnStart && vnTime <= mnEnd) return "mn";
@@ -291,34 +308,73 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
+    // Rule: 'dat' → 'da'
+    prev = formatted;
+    formatted = formatted.replace(/\bdat\b/gi, "da");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: 'dau duoi' → 'dd'
     prev = formatted;
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Province abbreviations
-    // 1) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
-    // 2) ASCII letter + dot + word → first two letters (e.g. h.noi→hn, t. pho→tp)
+    // 1) Specific common full-name provinces
     prev = formatted;
-    formatted = formatted.replace(/[đĐ][.\s]\s?([a-zA-Z])\S*/g, function(match, p1) {
+    formatted = formatted.replace(/\b(ha\s*noi|hanoi|hnoi)\b/gi, "hn");
+    formatted = formatted.replace(/\b(hai\s*phong|hphong)\b/gi, "hp");
+    formatted = formatted.replace(/\b(ho\s*chi\s*minh|hcm)\b/gi, "hcm");
+    formatted = formatted.replace(/\b(da\s*nang|dnang)\b/gi, "dnang");
+    formatted = formatted.replace(/\b(kon\s*tum|kontum)\b/gi, "kt");
+    formatted = formatted.replace(/\b(khanh\s*hoa|khanhhoa)\b/gi, "kh");
+    formatted = formatted.replace(/\b(binh\s*duong|bduong)\b/gi, "bd");
+    formatted = formatted.replace(/\b(binh\s*dinh|bdinh)\b/gi, "bdi");
+    formatted = formatted.replace(/\b(binh\s*phuoc|bphuoc)\b/gi, "bp");
+    formatted = formatted.replace(/\b(binh\s*thuan|bthuan)\b/gi, "bth");
+    formatted = formatted.replace(/\b(quang\s*ngai|qngai)\b/gi, "qngai");
+    formatted = formatted.replace(/\b(quang\s*nam|qnam)\b/gi, "qna");
+    formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
+    formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
+    if (formatted !== prev) wasFormatted = true;
+
+    // 2) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
+    prev = formatted;
+    formatted = formatted.replace(/[đĐ][.\s]\s?([a-zA-Z])\S*/g, function (match, p1) {
       return ("d" + p1).toLowerCase();
     });
-    formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function(match, p1, p2) {
+    if (formatted !== prev) wasFormatted = true;
+
+    // 3) ASCII letter + dot + word → first two letters (e.g. h.noi→hn, t.pho→tp)
+    prev = formatted;
+    formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function (match, p1, p2) {
       return (p1 + p2).toLowerCase();
     });
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: 2dn/2dt/2dmn → 2d, 3dn/3dt/3dmn → 3d, 4dn/4dmn → 4d
+    // 4) Single letter + space + word → first two letters (e.g. k tum→kt, k hoa→kh, h noi→hn)
     prev = formatted;
-    formatted = formatted.replace(/\b2d(mn|[nt])\b/gi, "2d");
-    formatted = formatted.replace(/\b3d(mn|[nt])\b/gi, "3d");
-    formatted = formatted.replace(/\b4d(mn|n)\b/gi, "4d");
+    formatted = formatted.replace(/\b([a-zA-Z])\s+([a-zA-Z])\S*/gi, function (match, p1, p2) {
+      // Only match if first part is a single letter (not a known keyword)
+      if (/^(b|dd|da|lo|xc)$/i.test(p1)) return match; // skip bet keywords
+      return (p1 + p2).toLowerCase();
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 2d/3d/4d suffix stripping (with or without space)
+    // Handles: 2dn, 2dt, 2dmn, 2dmt, 2dmnt, 2d n, 2d t, 2mn, 2mt → 2d (same for 3d, 4d)
+    prev = formatted;
+    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|[nt])\b/gi, "2d");
+    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|[nt])\b/gi, "3d");
+    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|[nt])\b/gi, "4d");
+    formatted = formatted.replace(/\b2m[nt]\b/gi, "2d");
+    formatted = formatted.replace(/\b3m[nt]\b/gi, "3d");
+    formatted = formatted.replace(/\b4mn\b/gi, "4d");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Split 4+ consecutive digits with 'da' suffix
     // e.g. "8998da0,5" → "89 98 da 0,5"
     prev = formatted;
-    formatted = formatted.replace(/(\d{4,})(da)([\d,]+)/gi, function(match, digits, da, value) {
+    formatted = formatted.replace(/(\d{4,})(da)([\d,]+)/gi, function (match, digits, da, value) {
       if (digits.length % 2 !== 0) {
         errors.push("Odd digit count in \"" + match + "\"");
         return match;
@@ -331,21 +387,23 @@ function formatInputMessage(text) {
     });
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: Split remaining 4+ consecutive digits into pairs
-    // e.g. "5191" → "51 91"
-    prev = formatted;
-    formatted = formatted.replace(/\d{4,}/g, function(match) {
-      if (match.length % 2 !== 0) {
-        errors.push("Odd digit count: \"" + match + "\"");
-        return match;
-      }
-      var pairs = [];
-      for (var i = 0; i < match.length; i += 2) {
-        pairs.push(match.substr(i, 2));
-      }
-      return pairs.join(" ");
-    });
-    if (formatted !== prev) wasFormatted = true;
+    // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
+    // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
+    if (/\bda\b/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/\d{4,}/g, function (match) {
+        if (match.length % 2 !== 0) {
+          errors.push("Odd digit count: \"" + match + "\"");
+          return match;
+        }
+        var pairs = [];
+        for (var i = 0; i < match.length; i += 2) {
+          pairs.push(match.substr(i, 2));
+        }
+        return pairs.join(" ");
+      });
+      if (formatted !== prev) wasFormatted = true;
+    }
 
     // Rule: '/' → ';'
     prev = formatted;
@@ -672,7 +730,7 @@ bot.on("text", async (ctx) => {
     if (result) {
       const html = `<pre>${escapeHtml(result)}</pre>`;
       ctx.reply(html, { parse_mode: "HTML" });
-      log("📤 [Bot/Group]", `Replied in ${where} | triggered by: ${who} | result: ${preview(result)}`);
+      log("📤 [Bot/Group]", `Replied to msg ${msg.message_id} in ${where} | triggered by: ${who} | result: ${preview(result)}`);
     }
   }
 });
@@ -742,7 +800,7 @@ async function startUserbot() {
       try {
         const html = `<pre>${escapeHtml(result)}</pre>`;
         await bot.telegram.sendMessage(botChatId, html, { parse_mode: "HTML" });
-        log("📤 [Bot via Userbot]", `✅ Delivered to chat ${botChatId} | result: ${preview(result)}`);
+        log("📤 [Bot via Userbot]", `✅ Replied to msg ${message.id} in chat ${botChatId} | result: ${preview(result)}`);
       } catch (e) {
         logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
       }
@@ -854,8 +912,19 @@ async function startUserbot() {
         // Ignore messages from the bot itself (counter replies)
         if (senderId === botSelfId.toString()) return;
 
-        // Ignore outgoing messages from userbot itself
-        if (message.out || senderId === userbotSelfId) return;
+        // Ignore outgoing messages from userbot itself (except in no-ignore groups)
+        const NO_IGNORE_USERBOT_GROUPS = ["-1003724203074"];
+        if (message.out || senderId === userbotSelfId) {
+          let skipIgnore = false;
+          for (let i = 0; i < NO_IGNORE_USERBOT_GROUPS.length; i++) {
+            const gid = NO_IGNORE_USERBOT_GROUPS[i];
+            if (chatId === gid || "-100" + chatId === gid || chatId === gid.replace(/^-100/, "")) {
+              skipIgnore = true;
+              break;
+            }
+          }
+          if (!skipIgnore) return;
+        }
 
         // Check if this message is from an input.json group
         let matchedGroupId = null;
@@ -888,14 +957,16 @@ async function startUserbot() {
 
         // Resolve sender name (first + last)
         let senderName = "unknown";
-        try {
-          const senderEntity = await client.getEntity(message.senderId);
-          const first = senderEntity.firstName || "";
-          const last = senderEntity.lastName || "";
-          senderName = (first + " " + last).trim() || "unknown";
-        } catch (e) {
-          logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) {}
+        if (message.senderId) {
+          try {
+            const senderEntity = await client.getEntity(message.senderId);
+            const first = senderEntity.firstName || "";
+            const last = senderEntity.lastName || "";
+            senderName = (first + " " + last).trim() || "unknown";
+          } catch (e) {
+            logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
+            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) { }
+          }
         }
 
         // Get group name from input.json
@@ -911,23 +982,30 @@ async function startUserbot() {
 
         const botChatId = Number(matchedGroupId);
 
-        // Bot replies with counter in the same input group
-        try {
-          await bot.telegram.sendMessage(botChatId, `${counter}`);
-          log("📤 [InputListener]", `Bot replied "${counter}" in group ${matchedGroupId}`);
-        } catch (e) {
-          logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) {}
-        }
-
         // Format the message for chat.txt bot
         const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
+
+        // Only reply with counter if message is a pure bet (no conversation mixed in)
+        if (!isPureBet(message.text)) {
+          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" is not a pure bet — skipping reply & forward | original: ${preview(message.text)} | formatted: ${preview(formatted)}`);
+          messageCounters[matchedGroupId]--; // revert counter since it's not a valid bet
+          return;
+        }
+
+        // Bot replies with counter to the original message in the same input group
+        try {
+          await bot.telegram.sendMessage(botChatId, `${counter}`);
+          log("📤 [InputListener]", `Bot replied "${counter}" to msg ${message.id} in group ${matchedGroupId}`);
+        } catch (e) {
+          logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) { }
+        }
 
         // Log format errors to error chat
         if (errors.length > 0) {
           try {
             const errorMsg = "⚠️ Format errors in \"" + groupName + "\" from " + senderName + ":\n" +
-              errors.map(function(e) { return "• " + e; }).join("\n") +
+              errors.map(function (e) { return "• " + e; }).join("\n") +
               "\n\nOriginal:\n" + message.text;
             await bot.telegram.sendMessage(ERROR_CHAT_ID, errorMsg);
             logError("⚠️  [InputListener]", `Format errors sent to error chat: ${errors.join(", ")}`);
@@ -940,27 +1018,32 @@ async function startUserbot() {
         const fromEntity = resolvedInputGroups[matchedGroupId];
         if (!fromEntity) {
           logError("❌ [InputListener]", `No resolved entity for source group ${matchedGroupId} — cannot forward/send`);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ No resolved entity for group " + matchedGroupId + " — cannot forward/send"); } catch (_) {}
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ No resolved entity for group " + matchedGroupId + " — cannot forward/send"); } catch (_) { }
           return;
         }
 
         const msgId = message.id;
 
-        if (wasFormatted) {
-          // Formatting applied → send text with header (not forward)
-          const fullMessage = formatted;
+        // Decide: forward directly if no reformatting needed, else send formatted text
+        const fullMessage = formatted;
 
-          forwardQueue.push(async () => {
+        forwardQueue.push(async () => {
+          if (wasFormatted) {
+            // Message was reformatted → send the formatted text + extra info message
             log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
+            const infoMessage = senderName + " - " + groupName;
             const chatKeys = Object.keys(resolvedTargetChats);
             for (let ci = 0; ci < chatKeys.length; ci++) {
               const chatKey = chatKeys[ci];
               try {
                 await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
                 log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
+                // Send extra message with sender name + group name
+                await client.sendMessage(resolvedTargetChats[chatKey], { message: infoMessage });
+                log("📤 [InputListener]", `Userbot sent info "${infoMessage}" to chat ${chatKey}`);
               } catch (e) {
                 logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
               }
               if (ci < chatKeys.length - 1) {
                 const delay = Math.floor(Math.random() * 3 + 3) * 1000;
@@ -968,11 +1051,9 @@ async function startUserbot() {
                 await new Promise((r) => setTimeout(r, delay));
               }
             }
-          });
-        } else {
-          // No formatting needed → forward as-is (normal behavior)
-          forwardQueue.push(async () => {
-            log("📬 [Queue]", `Processing forward for message #${counter} (queue size: ${forwardQueue.length})`);
+          } else {
+            // Message doesn't need reformatting → forward directly
+            log("📬 [Queue]", `Processing direct forward for message #${counter} (queue size: ${forwardQueue.length})`);
             const chatKeys = Object.keys(resolvedTargetChats);
             for (let ci = 0; ci < chatKeys.length; ci++) {
               const chatKey = chatKeys[ci];
@@ -981,43 +1062,47 @@ async function startUserbot() {
                   messages: [msgId],
                   fromPeer: fromEntity,
                 });
-                log("📤 [InputListener]", `Userbot forwarded message #${counter} to chat ${chatKey}`);
+                log("📤 [InputListener]", `Userbot forwarded original message #${counter} to chat ${chatKey}`);
               } catch (e) {
                 logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
               }
               if (ci < chatKeys.length - 1) {
                 const delay = Math.floor(Math.random() * 3 + 3) * 1000;
-                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next forward...`);
+                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
                 await new Promise((r) => setTimeout(r, delay));
               }
             }
-          });
-        }
+          }
+        });
 
         processForwardQueue();
       } catch (err) {
         logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
-        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ InputListener crash: " + err.message + "\n" + err.stack); } catch (_) {}
+        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ InputListener crash: " + err.message + "\n" + err.stack); } catch (_) { }
       }
     }, new NewMessage({}));
 
     log("👁️  [InputListener]", `Listening to ${inputGroupIds.length} input group(s)`);
 
-    // Reset counters daily at midnight VN time
-    let lastResetDay = -1;
+    // Reset counters at midnight, 16:35, and 17:35 VN time
+    let lastResetKey = "";
     setInterval(() => {
       const now = new Date();
-      const vnHour = (now.getUTCHours() + 7) % 24;
-      const vnDay = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCDate();
-      if (vnHour === 0 && lastResetDay !== vnDay) {
-        lastResetDay = vnDay;
-        for (const gid in messageCounters) {
-          messageCounters[gid] = 0;
+      const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+      const vnHour = vnTime.getUTCHours();
+      const vnMinute = vnTime.getUTCMinutes();
+      const resetKey = vnTime.getUTCFullYear() + "-" + vnTime.getUTCMonth() + "-" + vnTime.getUTCDate() + "_" + vnHour + ":" + vnMinute;
+      if ((vnHour === 0 && vnMinute === 0) || (vnHour === 16 && vnMinute === 35) || (vnHour === 17 && vnMinute === 35)) {
+        if (lastResetKey !== resetKey) {
+          lastResetKey = resetKey;
+          for (const gid in messageCounters) {
+            messageCounters[gid] = 0;
+          }
+          log("🔄 [InputListener]", `Counters reset at ${vnHour}:${vnMinute} VN time`);
         }
-        log("🔄 [InputListener]", "Counters reset at midnight VN time");
       }
-    }, 60000); // check every 60s
+    }, 30000); // check every 30s
   }
 
   // Keep-alive: ping Telegram periodically to prevent TIMEOUT
