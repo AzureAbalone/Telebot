@@ -983,26 +983,50 @@ async function startUserbot() {
 
         const msgId = message.id;
 
-        // wasFormatted is always true here (we returned early if not)
-        // Send formatted text with header to chat.txt targets
+        // Decide: forward directly if no reformatting needed, else send formatted text
         const fullMessage = formatted;
 
         forwardQueue.push(async () => {
-          log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
-          const chatKeys = Object.keys(resolvedTargetChats);
-          for (let ci = 0; ci < chatKeys.length; ci++) {
-            const chatKey = chatKeys[ci];
-            try {
-              await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
-              log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
-            } catch (e) {
-              logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
-              try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+          if (wasFormatted) {
+            // Message was reformatted → send the formatted text
+            log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
+            const chatKeys = Object.keys(resolvedTargetChats);
+            for (let ci = 0; ci < chatKeys.length; ci++) {
+              const chatKey = chatKeys[ci];
+              try {
+                await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
+                log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
+              } catch (e) {
+                logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+              }
+              if (ci < chatKeys.length - 1) {
+                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
+                await new Promise((r) => setTimeout(r, delay));
+              }
             }
-            if (ci < chatKeys.length - 1) {
-              const delay = Math.floor(Math.random() * 3 + 3) * 1000;
-              log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
-              await new Promise((r) => setTimeout(r, delay));
+          } else {
+            // Message doesn't need reformatting → forward directly
+            log("📬 [Queue]", `Processing direct forward for message #${counter} (queue size: ${forwardQueue.length})`);
+            const chatKeys = Object.keys(resolvedTargetChats);
+            for (let ci = 0; ci < chatKeys.length; ci++) {
+              const chatKey = chatKeys[ci];
+              try {
+                await client.forwardMessages(resolvedTargetChats[chatKey], {
+                  messages: [msgId],
+                  fromPeer: fromEntity,
+                });
+                log("📤 [InputListener]", `Userbot forwarded original message #${counter} to chat ${chatKey}`);
+              } catch (e) {
+                logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}: ${e.message}`);
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
+              }
+              if (ci < chatKeys.length - 1) {
+                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
+                await new Promise((r) => setTimeout(r, delay));
+              }
             }
           }
         });
