@@ -922,17 +922,24 @@ async function startUserbot() {
 
         const botChatId = Number(matchedGroupId);
 
-        // Bot replies with counter in the same input group
+        // Format the message for chat.txt bot
+        const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
+
+        // Only reply with counter if message matches a known bet format
+        if (!wasFormatted) {
+          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" does not match bet format — skipping reply & forward`);
+          messageCounters[matchedGroupId]--; // revert counter since it's not a valid bet
+          return;
+        }
+
+        // Bot replies with counter to the original message in the same input group
         try {
-          await bot.telegram.sendMessage(botChatId, `${counter}`);
-          log("📤 [InputListener]", `Bot replied "${counter}" in group ${matchedGroupId}`);
+          await bot.telegram.sendMessage(botChatId, `${counter}`, { reply_parameters: { message_id: message.id } });
+          log("📤 [InputListener]", `Bot replied "${counter}" to msg ${message.id} in group ${matchedGroupId}`);
         } catch (e) {
           logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
           try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) {}
         }
-
-        // Format the message for chat.txt bot
-        const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
 
         // Log format errors to error chat
         if (errors.length > 0) {
@@ -957,54 +964,29 @@ async function startUserbot() {
 
         const msgId = message.id;
 
-        if (wasFormatted) {
-          // Formatting applied → send text with header (not forward)
-          const fullMessage = formatted;
+        // wasFormatted is always true here (we returned early if not)
+        // Send formatted text with header to chat.txt targets
+        const fullMessage = formatted;
 
-          forwardQueue.push(async () => {
-            log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
-            const chatKeys = Object.keys(resolvedTargetChats);
-            for (let ci = 0; ci < chatKeys.length; ci++) {
-              const chatKey = chatKeys[ci];
-              try {
-                await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
-                log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
-              } catch (e) {
-                logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
-              }
-              if (ci < chatKeys.length - 1) {
-                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
-                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
-                await new Promise((r) => setTimeout(r, delay));
-              }
+        forwardQueue.push(async () => {
+          log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
+          const chatKeys = Object.keys(resolvedTargetChats);
+          for (let ci = 0; ci < chatKeys.length; ci++) {
+            const chatKey = chatKeys[ci];
+            try {
+              await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
+              log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
+            } catch (e) {
+              logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
+              try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
             }
-          });
-        } else {
-          // No formatting needed → forward as-is (normal behavior)
-          forwardQueue.push(async () => {
-            log("📬 [Queue]", `Processing forward for message #${counter} (queue size: ${forwardQueue.length})`);
-            const chatKeys = Object.keys(resolvedTargetChats);
-            for (let ci = 0; ci < chatKeys.length; ci++) {
-              const chatKey = chatKeys[ci];
-              try {
-                await client.forwardMessages(resolvedTargetChats[chatKey], {
-                  messages: [msgId],
-                  fromPeer: fromEntity,
-                });
-                log("📤 [InputListener]", `Userbot forwarded message #${counter} to chat ${chatKey}`);
-              } catch (e) {
-                logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) {}
-              }
-              if (ci < chatKeys.length - 1) {
-                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
-                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next forward...`);
-                await new Promise((r) => setTimeout(r, delay));
-              }
+            if (ci < chatKeys.length - 1) {
+              const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+              log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
+              await new Promise((r) => setTimeout(r, delay));
             }
-          });
-        }
+          }
+        });
 
         processForwardQueue();
       } catch (err) {
