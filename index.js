@@ -671,7 +671,7 @@ bot.on("text", async (ctx) => {
     const result = processMessage(text);
     if (result) {
       const html = `<pre>${escapeHtml(result)}</pre>`;
-      ctx.reply(html, { parse_mode: "HTML", reply_parameters: { message_id: msg.message_id } });
+      ctx.reply(html, { parse_mode: "HTML", reply_parameters: { message_id: msg.message_id, allow_sending_without_reply: true } });
       log("📤 [Bot/Group]", `Replied to msg ${msg.message_id} in ${where} | triggered by: ${who} | result: ${preview(result)}`);
     }
   }
@@ -741,7 +741,7 @@ async function startUserbot() {
       }
       try {
         const html = `<pre>${escapeHtml(result)}</pre>`;
-        await bot.telegram.sendMessage(botChatId, html, { parse_mode: "HTML", reply_parameters: { message_id: message.id } });
+        await bot.telegram.sendMessage(botChatId, html, { parse_mode: "HTML", reply_parameters: { message_id: message.id, allow_sending_without_reply: true } });
         log("📤 [Bot via Userbot]", `✅ Replied to msg ${message.id} in chat ${botChatId} | result: ${preview(result)}`);
       } catch (e) {
         logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
