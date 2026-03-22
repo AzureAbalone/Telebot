@@ -196,14 +196,34 @@ function isPureBet(text) {
       continue;
     }
 
-    // Short alphanumeric code (1-4 chars with at least one letter) — province codes like dn, hn, tp, 2d, 3d, 4d
-    if (/^[a-z0-9]{1,4}$/.test(token) && /[a-z]/.test(token)) continue;
+    // Known province/region codes used in betting (explicit allowlist)
+    var provinceCodes = ['dn','hn','tp','hcm','sg','2d','3d','4d','mb','mt','mn','qn','bd','vl','nt','bt','cm','ct','ag','tg','bl','kg','hg','st','tv','kt','py','gl','bp','la','dg','dl','bth','dna','kh','hue','qng','qb','qni','pt','bdi','ld','tn','bn','dt','3dmn'];
+    if (provinceCodes.indexOf(token) >= 0) continue;
 
-    // Mixed number+keyword not yet separated (e.g. 785xdau100, 12dau50)
+    // Mixed number+keyword not yet separated (e.g. 785xdau100, 12dau50, 456dau30duoi10)
     var alpha = token.replace(/[\d.,]/g, '');
-    if (alpha && betKeywords.indexOf(alpha) >= 0) {
-      hasBetKeyword = true;
-      continue;
+    if (alpha) {
+      // Try to consume all alpha chars by greedily matching keywords left-to-right
+      var remaining = alpha;
+      var allMatched = true;
+      var foundKw = false;
+      while (remaining.length > 0) {
+        var matched = false;
+        // Try longest keyword first (betKeywords is ordered long→short)
+        for (var k = 0; k < betKeywords.length; k++) {
+          if (remaining.indexOf(betKeywords[k]) === 0) {
+            remaining = remaining.substring(betKeywords[k].length);
+            foundKw = true;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) { allMatched = false; break; }
+      }
+      if (allMatched && foundKw) {
+        hasBetKeyword = true;
+        continue;
+      }
     }
 
     // Unknown token — not a pure bet
