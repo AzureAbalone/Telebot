@@ -348,21 +348,23 @@ function formatInputMessage(text) {
     });
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: Split remaining 4+ consecutive digits into pairs
-    // e.g. "5191" → "51 91"
-    prev = formatted;
-    formatted = formatted.replace(/\d{4,}/g, function(match) {
-      if (match.length % 2 !== 0) {
-        errors.push("Odd digit count: \"" + match + "\"");
-        return match;
-      }
-      var pairs = [];
-      for (var i = 0; i < match.length; i += 2) {
-        pairs.push(match.substr(i, 2));
-      }
-      return pairs.join(" ");
-    });
-    if (formatted !== prev) wasFormatted = true;
+    // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
+    // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
+    if (/\bda\b/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/\d{4,}/g, function(match) {
+        if (match.length % 2 !== 0) {
+          errors.push("Odd digit count: \"" + match + "\"");
+          return match;
+        }
+        var pairs = [];
+        for (var i = 0; i < match.length; i += 2) {
+          pairs.push(match.substr(i, 2));
+        }
+        return pairs.join(" ");
+      });
+      if (formatted !== prev) wasFormatted = true;
+    }
 
     // Rule: '/' → ';'
     prev = formatted;
