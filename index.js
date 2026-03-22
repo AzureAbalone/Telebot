@@ -254,7 +254,7 @@ function removeBackticks(str) {
   return result;
 }
 
-// ─── Helper: replace 'lo' with 'b' case-insensitive (no regex) ──
+// ─── Helper: replace 'lo' with 'b', 'dx' with 'da', 'dat' with 'da' case-insensitive (no regex) ──
 function replaceLoWithB(str) {
   let result = "";
   let i = 0;
@@ -273,6 +273,14 @@ function replaceLoWithB(str) {
     ) {
       result += "da";
       i += 2;
+    } else if (
+      i + 2 < str.length &&
+      (str[i] === "d" || str[i] === "D") &&
+      (str[i + 1] === "a" || str[i + 1] === "A") &&
+      (str[i + 2] === "t" || str[i + 2] === "T")
+    ) {
+      result += "da";
+      i += 3;
     } else {
       result += str[i];
       i++;
@@ -320,10 +328,7 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/(\d)\s*-\s*da\b/gi, "$1 da");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: 'dat' → 'da'
-    prev = formatted;
-    formatted = formatted.replace(/\bdat\b/gi, "da");
-    if (formatted !== prev) wasFormatted = true;
+
 
     // Rule: 'dau duoi' → 'dd'
     prev = formatted;
@@ -502,16 +507,17 @@ function getLineGroup(lineArr) {
 
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
-  // Step 1: Check for header and extract raw content after it
+  // Step 1: Check for header and extract raw content after ALL headers
   if (!text.includes(HEADER_PATTERN)) return null;
 
-  const lastIndex = text.lastIndexOf(HEADER_PATTERN);
-  let content = text.substring(lastIndex + HEADER_PATTERN.length).trim();
-
-  if (!content) {
-    const firstIndex = text.indexOf(HEADER_PATTERN);
-    content = text.substring(firstIndex + HEADER_PATTERN.length).trim();
+  // Split by header pattern → collect content after every occurrence
+  const parts = text.split(HEADER_PATTERN);
+  const contentParts = [];
+  for (let p = 1; p < parts.length; p++) { // skip parts[0] (text before first header)
+    const part = parts[p].trim();
+    if (part) contentParts.push(part);
   }
+  let content = contentParts.join("\n");
   if (!content) return null;
 
   // Step 2: Remove extra backticks (no regex)
