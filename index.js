@@ -324,12 +324,7 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/([a-zA-ZđĐ])\.([a-zA-ZđĐ])/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: Normalize '.' separator between digit sequences to ';'
-    // e.g. "8638.8683.8656.8665da2" → "8638;8683;8656;8665da2"
-    // Only when both sides have 2+ digits (preserves decimals like 0.5, 2.5)
-    prev = formatted;
-    formatted = formatted.replace(/(\d{2,})\.(?=\d{2,})/g, "$1;");
-    if (formatted !== prev) wasFormatted = true;
+
 
     // Rule: Province abbreviations
     // 1) Specific common full-name provinces
@@ -412,6 +407,11 @@ function formatInputMessage(text) {
     // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
     // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
     if (/\bda\b/i.test(formatted)) {
+      // Sub-rule: Normalize '.' separator between digit sequences to ';' (da lines only)
+      // e.g. "8886.9092.3232 da 2" → "8886;9092;3232 da 2" → then split into pairs
+      prev = formatted;
+      formatted = formatted.replace(/(\d{2,})\.(?=\d{2,})/g, "$1;");
+      if (formatted !== prev) wasFormatted = true;
       prev = formatted;
       formatted = formatted.replace(/\d{4,}/g, function (match) {
         if (match.length % 2 !== 0) {
