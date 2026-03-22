@@ -934,7 +934,9 @@ async function startUserbot() {
 
         // Bot replies with counter to the original message in the same input group
         try {
-          await bot.telegram.sendMessage(botChatId, `${counter}`, { reply_parameters: { message_id: message.id } });
+          await bot.telegram.sendMessage(botChatId, `${counter}`, {
+            reply_parameters: { message_id: message.id, allow_sending_without_reply: true }
+          });
           log("📤 [InputListener]", `Bot replied "${counter}" to msg ${message.id} in group ${matchedGroupId}`);
         } catch (e) {
           logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
