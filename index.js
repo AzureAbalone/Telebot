@@ -183,8 +183,8 @@ function isPureBet(text) {
   // 1) Must have at least one digit (bets always contain numbers)
   if (!/\d/.test(lower)) return false;
 
-  // 2) Must contain at least one bet keyword
-  if (!/(dau|duoi|dui|dao|dd|xc|xd|da|lo|\db|\bb\d)/i.test(lower)) return false;
+  // 2) Must contain at least one bet keyword (including Vietnamese đ variants)
+  if (!/(dau|duoi|dui|dao|dd|xc|xd|da|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
