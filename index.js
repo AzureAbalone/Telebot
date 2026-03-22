@@ -313,6 +313,13 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/[đĐ][aáàảãạ]/g, "da");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Normalize separators around 'da'
+    // e.g. "0110-da1" → "0110 da 1", "3232da2" stays for split rule, "-da " → " da "
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\s*-\s*da\s*(\d)/gi, "$1 da $2");
+    formatted = formatted.replace(/(\d)\s*-\s*da\b/gi, "$1 da");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: 'dat' → 'da'
     prev = formatted;
     formatted = formatted.replace(/\bdat\b/gi, "da");
