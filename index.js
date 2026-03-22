@@ -175,62 +175,21 @@ function isValidInputMessage(text) {
   return false; // all dots
 }
 
-// ─── Helper: check if text is a pure bet (only numbers, bet keywords, province codes) ──
+// ─── Helper: check if text is a pure bet (not mixed with conversation) ──
 function isPureBet(text) {
   if (!text) return false;
-  var tokens = text.split(/[\s,;\n\r\/]+/).filter(function(t) { return t.length > 0; });
-  if (tokens.length === 0) return false;
+  var lower = text.toLowerCase();
 
-  var hasBetKeyword = false;
-  var betKeywords = ['xduoidao','xdaudao','xdaodau','xdaodui','xdaoduoi','daoxcdui','daoxcdau','xcdaodui','xcdaodau','xcduoi','xcdui','xcdau','xdau','xduoi','xdui','dd','dau','duoi','dui','xc','da','lo','b','daodui','daodau','daoduoi'];
+  // 1) Must have at least one digit (bets always contain numbers)
+  if (!/\d/.test(lower)) return false;
 
-  for (var i = 0; i < tokens.length; i++) {
-    var token = tokens[i].toLowerCase();
+  // 2) Must contain at least one bet keyword
+  if (!/(dau|duoi|dui|dao|dd|xc|xd|da|lo|\db|\bb\d)/i.test(lower)) return false;
 
-    // Pure number (digits, optional decimal, optional trailing n)
-    if (/^\d+([.,]\d+)?n?$/.test(token)) continue;
+  // 3) Reject if contains Vietnamese conversation words
+  if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
 
-    // Known bet keyword
-    if (betKeywords.indexOf(token) >= 0) {
-      hasBetKeyword = true;
-      continue;
-    }
-
-    // Known province/region codes used in betting (explicit allowlist)
-    var provinceCodes = ['dn','hn','tp','hcm','sg','2d','3d','4d','mb','mt','mn','qn','bd','vl','nt','bt','cm','ct','ag','tg','bl','kg','hg','st','tv','kt','py','gl','bp','la','dg','dl','bth','dna','kh','hue','qng','qb','qni','pt','bdi','ld','tn','bn','dt','3dmn'];
-    if (provinceCodes.indexOf(token) >= 0) continue;
-
-    // Mixed number+keyword not yet separated (e.g. 785xdau100, 12dau50, 456dau30duoi10)
-    var alpha = token.replace(/[\d.,]/g, '');
-    if (alpha) {
-      // Try to consume all alpha chars by greedily matching keywords left-to-right
-      var remaining = alpha;
-      var allMatched = true;
-      var foundKw = false;
-      while (remaining.length > 0) {
-        var matched = false;
-        // Try longest keyword first (betKeywords is ordered long→short)
-        for (var k = 0; k < betKeywords.length; k++) {
-          if (remaining.indexOf(betKeywords[k]) === 0) {
-            remaining = remaining.substring(betKeywords[k].length);
-            foundKw = true;
-            matched = true;
-            break;
-          }
-        }
-        if (!matched) { allMatched = false; break; }
-      }
-      if (allMatched && foundKw) {
-        hasBetKeyword = true;
-        continue;
-      }
-    }
-
-    // Unknown token — not a pure bet
-    return false;
-  }
-
-  return hasBetKeyword;
+  return true;
 }
 
 // ─── Helper: escape HTML special chars ────────────────────────────
@@ -984,7 +943,7 @@ async function startUserbot() {
         const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
 
         // Only reply with counter if message is a pure bet (no conversation mixed in)
-        if (!isPureBet(formatted) && !isPureBet(message.text)) {
+        if (!isPureBet(message.text)) {
           log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" is not a pure bet — skipping reply & forward | original: ${preview(message.text)} | formatted: ${preview(formatted)}`);
           messageCounters[matchedGroupId]--; // revert counter since it's not a valid bet
           return;
