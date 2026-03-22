@@ -159,7 +159,7 @@ function isQuietPeriod() {
   // 17:15 - 17:25
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
   // 18:15 - midnight
-  if (vnTime >= 18 * 60 + 15) return true;
+  if (vnTime >= 23 * 60 + 15) return true;
 
   return false;
 }
