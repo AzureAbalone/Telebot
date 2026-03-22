@@ -310,21 +310,9 @@ function formatInputMessage(text) {
 
     // Rule: 2dn/2dt/2dmn → 2d, 3dn/3dt/3dmn → 3d, 4dn/4dmn → 4d
     prev = formatted;
-    formatted = formatted.replace(/\b2d(mn|[nt])/gi, "2d");
-    formatted = formatted.replace(/\b3d(mn|[nt])/gi, "3d");
-    formatted = formatted.replace(/\b4d(mn|n)/gi, "4d");
-    if (formatted !== prev) wasFormatted = true;
-
-    // Rule: Insert space between 2d/3d/4d and immediately following digits
-    // e.g. "2d785" → "2d 785", "3d123" → "3d 123"
-    prev = formatted;
-    formatted = formatted.replace(/\b(2d|3d|4d)(\d)/gi, "$1 $2");
-    if (formatted !== prev) wasFormatted = true;
-
-    // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
-    prev = formatted;
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|dd|dau|duoi|dui|xc|da|b)(\d)/gi, "$1 $2 $3");
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|dd|dau|duoi|dui|xc|da|b)$/gi, "$1 $2");
+    formatted = formatted.replace(/\b2d(mn|[nt])\b/gi, "2d");
+    formatted = formatted.replace(/\b3d(mn|[nt])\b/gi, "3d");
+    formatted = formatted.replace(/\b4d(mn|n)\b/gi, "4d");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Split 4+ consecutive digits with 'da' suffix
