@@ -154,12 +154,12 @@ function isQuietPeriod() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute;
 
-  // 16:15 - 16:30
-  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 30) return true;
-  // 17:15 - 17:30
-  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 30) return true;
-  // 18:15 - 18:30
-  if (vnTime >= 18 * 60 + 15 && vnTime <= 18 * 60 + 59) return true;
+  // 16:15 - 16:20
+  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 20) return true;
+  // 17:15 - 17:25
+  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
+  // 18:15 - midnight
+  if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
 }
@@ -308,6 +308,11 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
+    // Rule: 'dat' → 'da'
+    prev = formatted;
+    formatted = formatted.replace(/\bdat\b/gi, "da");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: 'dau duoi' → 'dd'
     prev = formatted;
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
@@ -325,11 +330,14 @@ function formatInputMessage(text) {
     });
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: 2dn/2dt/2dmn → 2d, 3dn/3dt/3dmn → 3d, 4dn/4dmn → 4d
+    // Rule: 2dn/2dt/2dmn/2mn/2mt → 2d, 3dn/3dt/3dmn/3mn/3mt → 3d, 4dn/4dmn/4mn → 4d
     prev = formatted;
     formatted = formatted.replace(/\b2d(mn|[nt])\b/gi, "2d");
     formatted = formatted.replace(/\b3d(mn|[nt])\b/gi, "3d");
     formatted = formatted.replace(/\b4d(mn|n)\b/gi, "4d");
+    formatted = formatted.replace(/\b2m[nt]\b/gi, "2d");
+    formatted = formatted.replace(/\b3m[nt]\b/gi, "3d");
+    formatted = formatted.replace(/\b4mn\b/gi, "4d");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Split 4+ consecutive digits with 'da' suffix
