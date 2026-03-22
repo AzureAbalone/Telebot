@@ -182,7 +182,7 @@ function isPureBet(text) {
   if (tokens.length === 0) return false;
 
   var hasBetKeyword = false;
-  var betKeywords = ['xduoidao','xdaudao','xdaodau','xdaodui','xdaoduoi','daoxcdui','daoxcdau','xcdaodui','xcdaodau','xcduoi','xcdui','xcdau','xdau','xduoi','xdui','dd','dau','duoi','dui','xc','da','lo','b'];
+  var betKeywords = ['xduoidao','xdaudao','xdaodau','xdaodui','xdaoduoi','daoxcdui','daoxcdau','xcdaodui','xcdaodau','xcduoi','xcdui','xcdau','xdau','xduoi','xdui','dd','dau','duoi','dui','xc','da','lo','b','daodui','daodau','daoduoi'];
 
   for (var i = 0; i < tokens.length; i++) {
     var token = tokens[i].toLowerCase();
@@ -964,8 +964,8 @@ async function startUserbot() {
         const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
 
         // Only reply with counter if message is a pure bet (no conversation mixed in)
-        if (!isPureBet(formatted)) {
-          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" is not a pure bet — skipping reply & forward`);
+        if (!isPureBet(formatted) && !isPureBet(message.text)) {
+          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" is not a pure bet — skipping reply & forward | original: ${preview(message.text)} | formatted: ${preview(formatted)}`);
           messageCounters[matchedGroupId]--; // revert counter since it's not a valid bet
           return;
         }
