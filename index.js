@@ -318,13 +318,17 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: Normalize '.' separator to space
-    // Between letters: "k tum.k hoa" → "k tum k hoa"
-    // Between digit groups (3+ digits before dot): "8638.8683" → "8638 8683"
-    // Preserves decimals: "0.5", "2.5" stay unchanged (less than 3 digits before dot)
+    // Rule: Normalize '.' separator between letters to space
+    // e.g. "k tum.k hoa" → "k tum k hoa" (dot used as visual separator, not decimal)
     prev = formatted;
     formatted = formatted.replace(/([a-zA-ZđĐ])\.([a-zA-ZđĐ])/g, "$1 $2");
-    formatted = formatted.replace(/(\d{3,})\.(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Normalize '.' separator between digit sequences to ';'
+    // e.g. "8638.8683.8656.8665da2" → "8638;8683;8656;8665da2"
+    // Only when both sides have 2+ digits (preserves decimals like 0.5, 2.5)
+    prev = formatted;
+    formatted = formatted.replace(/(\d{2,})\.(?=\d{2,})/g, "$1;");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Province abbreviations
