@@ -1042,20 +1042,24 @@ async function startUserbot() {
 
     log("👁️  [InputListener]", `Listening to ${inputGroupIds.length} input group(s)`);
 
-    // Reset counters daily at midnight VN time
-    let lastResetDay = -1;
+    // Reset counters at midnight, 16:35, and 17:35 VN time
+    let lastResetKey = "";
     setInterval(() => {
       const now = new Date();
-      const vnHour = (now.getUTCHours() + 7) % 24;
-      const vnDay = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCDate();
-      if (vnHour === 0 && lastResetDay !== vnDay) {
-        lastResetDay = vnDay;
-        for (const gid in messageCounters) {
-          messageCounters[gid] = 0;
+      const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+      const vnHour = vnTime.getUTCHours();
+      const vnMinute = vnTime.getUTCMinutes();
+      const resetKey = vnTime.getUTCFullYear() + "-" + vnTime.getUTCMonth() + "-" + vnTime.getUTCDate() + "_" + vnHour + ":" + vnMinute;
+      if ((vnHour === 0 && vnMinute === 0) || (vnHour === 16 && vnMinute === 35) || (vnHour === 17 && vnMinute === 35)) {
+        if (lastResetKey !== resetKey) {
+          lastResetKey = resetKey;
+          for (const gid in messageCounters) {
+            messageCounters[gid] = 0;
+          }
+          log("🔄 [InputListener]", `Counters reset at ${vnHour}:${vnMinute} VN time`);
         }
-        log("🔄 [InputListener]", "Counters reset at midnight VN time");
       }
-    }, 60000); // check every 60s
+    }, 30000); // check every 30s
   }
 
   // Keep-alive: ping Telegram periodically to prevent TIMEOUT
