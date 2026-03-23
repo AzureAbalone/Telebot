@@ -328,6 +328,12 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: duoidao/duidao → daodui (alternate word order normalization)
+    prev = formatted;
+    formatted = formatted.replace(/duoidao/gi, "daodui");
+    formatted = formatted.replace(/duidao/gi, "daodui");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
     prev = formatted;
     formatted = formatted.replace(/[đĐ][aáàảãạ]/g, "da");
