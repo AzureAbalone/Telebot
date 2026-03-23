@@ -78,7 +78,6 @@ const API_HASH = process.env.API_HASH;
 const SESSION_STRING = process.env.SESSION_STRING || "";
 
 const CHAT_FILE = path.join(__dirname, "chat.txt");
-const INPUT_FILE = path.join(__dirname, "input.json");
 const PORT = process.env.PORT || 3000;
 
 // ─── Health check server (for cron jobs) ───────────────────────────
@@ -129,23 +128,6 @@ function loadChatIds() {
   }
 }
 
-// ─── Load input.json groups ──────────────────────────────────────
-function loadInputGroups() {
-  try {
-    if (!fs.existsSync(INPUT_FILE)) {
-      log("📄 [Config]", "input.json not found — input group listener disabled.");
-      return {};
-    }
-    const content = fs.readFileSync(INPUT_FILE, "utf-8");
-    const groups = JSON.parse(content);
-    const count = Object.keys(groups).length;
-    log("📄 [Config]", `Loaded ${count} input group(s) from input.json`);
-    return groups;
-  } catch (err) {
-    logError("❌ [Config]", "Error loading input.json:", err.message);
-    return {};
-  }
-}
 
 // ─── Helper: check if current VN time is in quiet period ─────────
 function isQuietPeriod() {
@@ -254,14 +236,33 @@ function removeBackticks(str) {
   return result;
 }
 
-// ─── Helper: replace 'lo' with 'b' case-insensitive (no regex) ──
+// ─── Helper: replace 'lo' with 'b', 'dx' with 'da', 'dat' with 'da' case-insensitive (no regex) ──
 function replaceLoWithB(str) {
   let result = "";
   let i = 0;
   while (i < str.length) {
-    if (i + 1 < str.length && (str[i] === "l" || str[i] === "L") && (str[i + 1] === "o" || str[i + 1] === "O")) {
+    if (
+      i + 1 < str.length &&
+      (str[i] === "l" || str[i] === "L") &&
+      (str[i + 1] === "o" || str[i + 1] === "O")
+    ) {
       result += "b";
       i += 2;
+    } else if (
+      i + 1 < str.length &&
+      (str[i] === "d" || str[i] === "D") &&
+      (str[i + 1] === "x" || str[i + 1] === "X")
+    ) {
+      result += "da";
+      i += 2;
+    } else if (
+      i + 2 < str.length &&
+      (str[i] === "d" || str[i] === "D") &&
+      (str[i + 1] === "a" || str[i + 1] === "A") &&
+      (str[i + 2] === "t" || str[i + 2] === "T")
+    ) {
+      result += "da";
+      i += 3;
     } else {
       result += str[i];
       i++;
@@ -301,13 +302,6 @@ function formatInputMessage(text) {
     prev = formatted;
     formatted = formatted.replace(/\bdx\b/gi, "da");
     formatted = formatted.replace(/\bdat\b/gi, "da");
-    if (formatted !== prev) wasFormatted = true;
-
-    // Rule: xdau / xdui + 3-digit numbers → xc dau / xc duoi
-    prev = formatted;
-    formatted = formatted.replace(/\b(?:xcdau|xdau)(\s+)(?=\d{3}(?!\d))/gi, "xc dau$1");
-    formatted = formatted.replace(/\b(?:xcdui|xdui)(\s+)(?=\d{3}(?!\d))/gi, "xc duoi$1");
-    formatted = formatted.replace(/\bxc(\s+)(?=\d{3}(?!\d))/gi, "xc$1");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
@@ -447,24 +441,19 @@ function formatInputMessage(text) {
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
     // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
-    // BUT ONLY turn it conditionally if ALL preceding bet numbers are EXACTLY 3 digits (124.345.456.665dui100 -> xdui).
-    // If it's mixed (e.g. 12 456 dau 10), it stays dau.
+    // BUT NOT when 3-digit number is an amount after a keyword (e.g. "dd 150 dau 200" stays as-is)
+    // (?<![a-zA-Z] ) prevents matching amounts like "dd 150", "b 200" etc.
     prev = formatted;
-    formatted = formatted.replace(/(^|\s|;)((?:\d+[\s;.,]+)*\d+)\s+((?:daodui|daodau|daoduoi|duoi|dui|dau)\b(?:[\s\d,]*\b(?:daodui|daodau|daoduoi|duoi|dui|dau)\b)*)/gi, function (m, prefix, numbers, rest) {
-      var nums = numbers.split(/[\s;.,]+/);
-      var all3 = nums.length > 0 && nums.every(function(n) { return n.length === 3; });
-      if (all3) {
-        var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
-          var t = kw.toLowerCase();
-          if (t === "daodui" || t === "daoduoi") return "xduoidao";
-          if (t === "daodau") return "xdaudao";
-          if (t === "duoi" || t === "dui") return "xduoi";
-          if (t === "dau") return "xdau";
-          return kw;
-        });
-        return prefix + numbers + " " + converted;
-      }
-      return m;
+    formatted = formatted.replace(/(?<![a-zA-Z] )(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
+      var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
+        var t = kw.toLowerCase();
+        if (t === "daodui" || t === "daoduoi") return "xduoidao";
+        if (t === "daodau") return "xdaudao";
+        if (t === "duoi" || t === "dui") return "xduoi";
+        if (t === "dau") return "xdau";
+        return kw;
+      });
+      return digits + converted;
     });
     if (formatted !== prev) wasFormatted = true;
 
@@ -931,295 +920,7 @@ async function startUserbot() {
 
   log("👁️  [Userbot]", `Monitoring for messages from bot ${TARGET_BOT_ID}`);
 
-  // ─── Input Group Listener (standalone) ────────────────────────────
-  const inputGroups = loadInputGroups();
-  const inputGroupIds = []; // normalized IDs from input.json
-  const messageCounters = {}; // per-group counters
 
-  for (const name in inputGroups) {
-    const id = inputGroups[name].ID;
-    if (id) {
-      inputGroupIds.push(id.toString());
-      messageCounters[id.toString()] = 0;
-      const label = inputGroups[name].name || name;
-      log("👁️  [InputListener]", `Monitoring input group "${label}" (ID: ${id})`);
-    }
-  }
-
-  // Get the userbot's own ID
-  const me = await client.getMe();
-  const userbotSelfId = me.id.toString();
-  log("👁️  [Userbot]", `Userbot self ID: ${userbotSelfId}`);
-
-  if (inputGroupIds.length > 0) {
-    // Get bot's own ID to ignore its replies (prevent loops)
-    const botInfo = await bot.telegram.getMe();
-    const botSelfId = botInfo.id;
-    log("👁️  [InputListener]", `Bot self ID: ${botSelfId} — will ignore own messages`);
-
-    // Resolve only the specific groups we need (no bulk dialog fetch)
-    const { Api } = require("telegram/tl");
-
-    // Helper: resolve a Telegram entity from a raw ID string (handles channels, groups, users/bots)
-    async function resolveEntity(rawId) {
-      const idStr = rawId.toString();
-      if (idStr.startsWith("-100")) {
-        // Supergroup / Channel
-        const channelId = BigInt(idStr.slice(4)); // remove "-100"
-        return await client.getEntity(new Api.PeerChannel({ channelId }));
-      } else if (idStr.startsWith("-")) {
-        // Legacy group chat (negative, no -100 prefix)
-        const chatId = BigInt(idStr.slice(1)); // remove "-"
-        return await client.getEntity(new Api.PeerChat({ chatId }));
-      } else {
-        // User / Bot (positive ID)
-        const userId = BigInt(idStr);
-        return await client.getEntity(new Api.PeerUser({ userId }));
-      }
-    }
-
-    // Pre-resolve input.json group entities (for fromPeer when forwarding)
-    const resolvedInputGroups = {};
-    for (let i = 0; i < inputGroupIds.length; i++) {
-      try {
-        const entity = await resolveEntity(inputGroupIds[i]);
-        resolvedInputGroups[inputGroupIds[i]] = entity;
-        log("✅ [InputListener]", `Resolved input group entity: ${inputGroupIds[i]}`);
-      } catch (e) {
-        logError("❌ [InputListener]", `Failed to resolve input group ${inputGroupIds[i]}:`, e.message);
-      }
-    }
-
-    // Pre-resolve chat.txt entities (for target when forwarding)
-    const resolvedTargetChats = {};
-    const chatIds = loadChatIds();
-    for (let t = 0; t < chatIds.length; t++) {
-      try {
-        const entity = await resolveEntity(chatIds[t]);
-        resolvedTargetChats[chatIds[t]] = entity;
-        log("✅ [InputListener]", `Resolved chat.txt entity: ${chatIds[t]}`);
-      } catch (e) {
-        logError("❌ [InputListener]", `Failed to resolve chat ${chatIds[t]}:`, e.message);
-      }
-    }
-
-    // === Forward Queue — process messages one at a time ===
-    const forwardQueue = [];
-    let isProcessingQueue = false;
-
-    async function processForwardQueue() {
-      if (isProcessingQueue) return;
-      isProcessingQueue = true;
-      while (forwardQueue.length > 0) {
-        const task = forwardQueue.shift();
-        try {
-          await task();
-        } catch (e) {
-          logError("❌ [Queue]", "Error processing queued task:", e.message);
-        }
-      }
-      isProcessingQueue = false;
-    }
-
-    client.addEventHandler(async (event) => {
-      try {
-        const message = event.message;
-        if (!message || !message.text) return;
-
-        const chatId = (message.chatId || message.peerId).toString();
-        const senderId = message.senderId?.toString();
-
-        // Ignore messages from the bot itself (counter replies)
-        if (senderId === botSelfId.toString()) return;
-
-        // Ignore outgoing messages from userbot itself (except in no-ignore groups)
-        const NO_IGNORE_USERBOT_GROUPS = ["-1003724203074"];
-        if (message.out || senderId === userbotSelfId) {
-          let skipIgnore = false;
-          for (let i = 0; i < NO_IGNORE_USERBOT_GROUPS.length; i++) {
-            const gid = NO_IGNORE_USERBOT_GROUPS[i];
-            if (chatId === gid || "-100" + chatId === gid || chatId === gid.replace(/^-100/, "")) {
-              skipIgnore = true;
-              break;
-            }
-          }
-          if (!skipIgnore) return;
-        }
-
-        // Check if this message is from an input.json group
-        let matchedGroupId = null;
-        for (let i = 0; i < inputGroupIds.length; i++) {
-          const gid = inputGroupIds[i];
-          // input.json has "-100xxxx", GramJS might give "xxxx" without -100
-          if (chatId === gid || "-100" + chatId === gid || chatId === gid.replace(/^-100/, "")) {
-            matchedGroupId = gid;
-            break;
-          }
-        }
-
-        if (!matchedGroupId) return;
-
-        // Check quiet period
-        if (isQuietPeriod()) {
-          log("🔇 [InputListener]", `Quiet period — skipping message in group ${matchedGroupId}`);
-          return;
-        }
-
-        // Check if message is valid (not just dots)
-        if (!isValidInputMessage(message.text)) {
-          log("⏭️  [InputListener]", `Invalid message (dots only) in group ${matchedGroupId} — skipped`);
-          return;
-        }
-
-        // Increment counter
-        messageCounters[matchedGroupId]++;
-        const counter = messageCounters[matchedGroupId];
-
-        // Resolve sender name (first + last)
-        let senderName = "unknown";
-        if (message.senderId) {
-          try {
-            const senderEntity = await client.getEntity(message.senderId);
-            const first = senderEntity.firstName || "";
-            const last = senderEntity.lastName || "";
-            senderName = (first + " " + last).trim() || "unknown";
-          } catch (e) {
-            logError("⚠️  [InputListener]", `Could not resolve sender ${message.senderId}: ${e.message}`);
-            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + message.senderId + ": " + e.message); } catch (_) { }
-          }
-        }
-
-        // Get group name from input.json
-        let groupName = matchedGroupId;
-        for (const key in inputGroups) {
-          if (inputGroups[key].ID === matchedGroupId) {
-            groupName = inputGroups[key].name || matchedGroupId;
-            break;
-          }
-        }
-
-        log("📩 [InputListener]", `Valid message #${counter} from ${senderName} in "${groupName}" (${matchedGroupId}) | preview: ${preview(message.text)}`);
-
-        const botChatId = Number(matchedGroupId);
-
-        // Format the message for chat.txt bot
-        const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
-
-        // Only reply with counter if message is a pure bet (no conversation mixed in)
-        if (!isPureBet(message.text)) {
-          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" is not a pure bet — skipping reply & forward | original: ${preview(message.text)} | formatted: ${preview(formatted)}`);
-          messageCounters[matchedGroupId]--; // revert counter since it's not a valid bet
-          return;
-        }
-
-        // Bot replies with counter to the original message in the same input group
-        try {
-          await bot.telegram.sendMessage(botChatId, `${counter}`);
-          log("📤 [InputListener]", `Bot replied "${counter}" to msg ${message.id} in group ${matchedGroupId}`);
-        } catch (e) {
-          logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) { }
-        }
-
-        // Log format errors to error chat
-        if (errors.length > 0) {
-          try {
-            const errorMsg = "⚠️ Format errors in \"" + groupName + "\" from " + senderName + ":\n" +
-              errors.map(function (e) { return "• " + e; }).join("\n") +
-              "\n\nOriginal:\n" + message.text;
-            await bot.telegram.sendMessage(ERROR_CHAT_ID, errorMsg);
-            logError("⚠️  [InputListener]", `Format errors sent to error chat: ${errors.join(", ")}`);
-          } catch (e) {
-            logError("❌ [InputListener]", `Failed to send error to ${ERROR_CHAT_ID}: ${e.message}`);
-          }
-        }
-
-        // Resolve entities for send/forward
-        const fromEntity = resolvedInputGroups[matchedGroupId];
-        if (!fromEntity) {
-          logError("❌ [InputListener]", `No resolved entity for source group ${matchedGroupId} — cannot forward/send`);
-          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ No resolved entity for group " + matchedGroupId + " — cannot forward/send"); } catch (_) { }
-          return;
-        }
-
-        const msgId = message.id;
-
-        // Decide: forward directly if no reformatting needed, else send formatted text
-        const fullMessage = formatted;
-
-        forwardQueue.push(async () => {
-          if (wasFormatted) {
-            // Message was reformatted → send the formatted text
-            log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
-            const chatKeys = Object.keys(resolvedTargetChats);
-            for (let ci = 0; ci < chatKeys.length; ci++) {
-              const chatKey = chatKeys[ci];
-              try {
-                await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
-                log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
-              } catch (e) {
-                logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
-              }
-              if (ci < chatKeys.length - 1) {
-                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
-                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
-                await new Promise((r) => setTimeout(r, delay));
-              }
-            }
-          } else {
-            // Message doesn't need reformatting → forward directly
-            log("📬 [Queue]", `Processing direct forward for message #${counter} (queue size: ${forwardQueue.length})`);
-            const chatKeys = Object.keys(resolvedTargetChats);
-            for (let ci = 0; ci < chatKeys.length; ci++) {
-              const chatKey = chatKeys[ci];
-              try {
-                await client.forwardMessages(resolvedTargetChats[chatKey], {
-                  messages: [msgId],
-                  fromPeer: fromEntity,
-                });
-                log("📤 [InputListener]", `Userbot forwarded original message #${counter} to chat ${chatKey}`);
-              } catch (e) {
-                logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}: ${e.message}`);
-                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
-              }
-              if (ci < chatKeys.length - 1) {
-                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
-                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
-                await new Promise((r) => setTimeout(r, delay));
-              }
-            }
-          }
-        });
-
-        processForwardQueue();
-      } catch (err) {
-        logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
-        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ InputListener crash: " + err.message + "\n" + err.stack); } catch (_) { }
-      }
-    }, new NewMessage({}));
-
-    log("👁️  [InputListener]", `Listening to ${inputGroupIds.length} input group(s)`);
-
-    // Reset counters at midnight, 16:35, and 17:35 VN time
-    let lastResetKey = "";
-    setInterval(() => {
-      const now = new Date();
-      const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-      const vnHour = vnTime.getUTCHours();
-      const vnMinute = vnTime.getUTCMinutes();
-      const resetKey = vnTime.getUTCFullYear() + "-" + vnTime.getUTCMonth() + "-" + vnTime.getUTCDate() + "_" + vnHour + ":" + vnMinute;
-      if ((vnHour === 0 && vnMinute === 0) || (vnHour === 16 && vnMinute === 35) || (vnHour === 17 && vnMinute === 35)) {
-        if (lastResetKey !== resetKey) {
-          lastResetKey = resetKey;
-          for (const gid in messageCounters) {
-            messageCounters[gid] = 0;
-          }
-          log("🔄 [InputListener]", `Counters reset at ${vnHour}:${vnMinute} VN time`);
-        }
-      }
-    }, 30000); // check every 30s
-  }
 
   // Keep-alive: ping Telegram periodically to prevent TIMEOUT
   setInterval(async () => {
