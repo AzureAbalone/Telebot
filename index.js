@@ -450,12 +450,13 @@ function formatInputMessage(text) {
       if (formatted !== prev) wasFormatted = true;
     }
 
-    // Rule: When line contains 'da', convert '05' or "0'5" to '0,5'
+    // Rule: When line contains 'da', convert '05' or "0'5" to '0,5' ONLY after 'da'
     // e.g. "89 98 da 05" → "89 98 da 0,5", "89 98 da 0'5" → "89 98 da 0,5"
+    // BUT "05 da 10" → "05" stays untouched (before da)
     if (/\bda\b/i.test(formatted)) {
       prev = formatted;
-      formatted = formatted.replace(/(?<!\d)0'5(?!\d)/g, "0,5");
-      formatted = formatted.replace(/(?<!\d)05(?!\d)/g, "0,5");
+      formatted = formatted.replace(/(\bda\b.*?)(?<!\d)0'5(?!\d)/gi, "$10,5");
+      formatted = formatted.replace(/(\bda\b.*?)(?<!\d)05(?!\d)/gi, "$10,5");
       if (formatted !== prev) wasFormatted = true;
     }
 
