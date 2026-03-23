@@ -316,6 +316,11 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
+    // Rule: baylo → b7lo (bay = bảy = 7)
+    prev = formatted;
+    formatted = formatted.replace(/\bbaylo/gi, "b7lo");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
     prev = formatted;
     formatted = formatted.replace(/daoxcdui/gi, "xduoidao");
@@ -906,8 +911,11 @@ async function startUserbot() {
 
       log("📩 [Userbot]", `Header message detected from bot ${TARGET_BOT_ID} in chat ${chatId} | preview: ${preview(message.text)}`);
 
-      const result = processMessage(message.text);
+      let result = processMessage(message.text);
       if (!result) return;
+
+      // Replace 'th' → 'hue' (Thừa Thiên Huế shorthand)
+      result = result.replace(/\bth\b/gi, "hue");
 
       log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
 
