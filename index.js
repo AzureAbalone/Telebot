@@ -448,8 +448,8 @@ function formatInputMessage(text) {
     // e.g. "89 98 da 05" → "89 98 da 0,5", "89 98 da 0'5" → "89 98 da 0,5"
     if (/\bda\b/i.test(formatted)) {
       prev = formatted;
-      formatted = formatted.replace(/\b0'5\b/g, "0,5");
-      formatted = formatted.replace(/\b05\b/g, "0,5");
+      formatted = formatted.replace(/(?<!\d)0'5(?!\d)/g, "0,5");
+      formatted = formatted.replace(/(?<!\d)05(?!\d)/g, "0,5");
       if (formatted !== prev) wasFormatted = true;
     }
 
