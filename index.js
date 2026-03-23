@@ -322,10 +322,14 @@ function formatInputMessage(text) {
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Normalize separators around 'da'
-    // e.g. "0110-da1" → "0110 da 1", "3232da2" stays for split rule, "-da " → " da "
+    // e.g. "0110-da1" → "0110 da 1", "77da0'5" → "77 da 0'5", "-da " → " da "
     prev = formatted;
     formatted = formatted.replace(/(\d)\s*-\s*da\s*(\d)/gi, "$1 da $2");
     formatted = formatted.replace(/(\d)\s*-\s*da\b/gi, "$1 da");
+    // General: separate digits directly adjacent to 'da' (no dash needed)
+    // e.g. "77da0'5" → "77 da 0'5", "3377da1" → "3377 da 1"
+    formatted = formatted.replace(/(\d)(da)([0-9,']+)/gi, "$1 da $3");
+    formatted = formatted.replace(/(\d)(da)\b/gi, "$1 da");
     if (formatted !== prev) wasFormatted = true;
 
 
