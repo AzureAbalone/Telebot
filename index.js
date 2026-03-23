@@ -600,6 +600,9 @@ function getLineGroup(lineArr) {
 
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
+  // Replace 'baylo' → 'b7lo' BEFORE any parsing (so 'lo' in 'baylo' isn't parsed as bet keyword)
+  text = text.replace(/\bbaylo\b/gi, "b7lo");
+
   // Step 1: Check for header and extract raw content after ALL headers
   if (!text.includes(HEADER_PATTERN)) return null;
 
@@ -918,10 +921,7 @@ async function startUserbot() {
 
       log("📩 [Userbot]", `Header message detected from bot ${TARGET_BOT_ID} in chat ${chatId} | preview: ${preview(message.text)}`);
 
-      // Replace 'baylo' → 'b7lo' BEFORE processMessage (so 'lo' in 'baylo' isn't parsed as bet keyword)
-      let rawText = message.text.replace(/\bbaylo\b/gi, "b7lo");
-
-      let result = processMessage(rawText);
+      let result = processMessage(message.text);
       if (!result) return;
 
       // Replace 'th' → 'hue' (Thừa Thiên Huế shorthand)
