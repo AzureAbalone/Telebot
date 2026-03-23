@@ -1190,14 +1190,18 @@ async function startUserbot() {
 
         forwardQueue.push(async () => {
           if (wasFormatted) {
-            // Message was reformatted → send the formatted text
+            // Message was reformatted → send the formatted text + extra info message
             log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
+            const infoMessage = senderName + " - " + groupName;
             const chatKeys = Object.keys(resolvedTargetChats);
             for (let ci = 0; ci < chatKeys.length; ci++) {
               const chatKey = chatKeys[ci];
               try {
                 await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
                 log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
+                // Send extra message with sender name + group name
+                await client.sendMessage(resolvedTargetChats[chatKey], { message: infoMessage });
+                log("📤 [InputListener]", `Userbot sent info "${infoMessage}" to chat ${chatKey}`);
               } catch (e) {
                 logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
                 try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
