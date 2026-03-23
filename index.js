@@ -159,7 +159,7 @@ function isQuietPeriod() {
   // 17:15 - 17:25
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
   // 18:15 - midnight
-  if (vnTime >= 18 * 60 + 15) return true;
+  if (vnTime >= 24 * 60 + 15) return true;
 
   return false;
 }
@@ -183,8 +183,8 @@ function isPureBet(text) {
   // 1) Must have at least one digit (bets always contain numbers)
   if (!/\d/.test(lower)) return false;
 
-  // 2) Must contain at least one bet keyword (including Vietnamese đ variants)
-  if (!/(dau|duoi|dui|dao|dd|xc|xd|da|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d)/i.test(lower)) return false;
+  // 2) Must contain at least one bet keyword OR amount pattern like 912x40
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
@@ -259,19 +259,8 @@ function replaceLoWithB(str) {
   let result = "";
   let i = 0;
   while (i < str.length) {
-    if (
-      i + 1 < str.length &&
-      (str[i] === "l" || str[i] === "L") &&
-      (str[i + 1] === "o" || str[i + 1] === "O")
-    ) {
+    if (i + 1 < str.length && (str[i] === "l" || str[i] === "L") && (str[i + 1] === "o" || str[i + 1] === "O")) {
       result += "b";
-      i += 2;
-    } else if (
-      i + 1 < str.length &&
-      (str[i] === "d" || str[i] === "D") &&
-      (str[i + 1] === "x" || str[i + 1] === "X")
-    ) {
-      result += "da";
       i += 2;
     } else {
       result += str[i];
@@ -308,14 +297,63 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
-    // Rule: 'dat' → 'da'
+    // Rule: dat and dx -> da
     prev = formatted;
+    formatted = formatted.replace(/\bdx\b/gi, "da");
     formatted = formatted.replace(/\bdat\b/gi, "da");
     if (formatted !== prev) wasFormatted = true;
+
+    // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/daoxcdui/gi, "xduoidao");
+    formatted = formatted.replace(/daoxcdau/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: xcdaodui → xduoidao, xcdaodau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/xcdaodui/gi, "xduoidao");
+    formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: duoidao/duidao → daodui (alternate word order normalization)
+    prev = formatted;
+    formatted = formatted.replace(/duoidao/gi, "daodui");
+    formatted = formatted.replace(/duidao/gi, "daodui");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
+    prev = formatted;
+    formatted = formatted.replace(/[đĐ][aáàảãạ]/g, "da");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Replace '+' separator between digits with space
+    // e.g. "01+02+08 da1" → "01 02 08 da1"
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Normalize separators around 'da'
+    // e.g. "0110-da1" → "0110 da 1", "77da0'5" → "77 da 0'5", "-da " → " da "
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\s*-\s*da\s*(\d)/gi, "$1 da $2");
+    formatted = formatted.replace(/(\d)\s*-\s*da\b/gi, "$1 da");
+    // General: separate digits directly adjacent to 'da' (no dash needed)
+    // e.g. "77da0'5" → "77 da 0'5", "3377da1" → "3377 da 1"
+    formatted = formatted.replace(/(\d)(da)([0-9,']+)/gi, "$1 da $3");
+    formatted = formatted.replace(/(\d)(da)\b/gi, "$1 da");
+    if (formatted !== prev) wasFormatted = true;
+
+
 
     // Rule: 'dau duoi' → 'dd'
     prev = formatted;
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Normalize '.' separator between letters to space
+    // e.g. "k tum.k hoa" → "k tum k hoa" (dot used as visual separator, not decimal)
+    prev = formatted;
+    formatted = formatted.replace(/([a-zA-ZđĐ])\.([a-zA-ZđĐ])/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Province abbreviations
@@ -335,6 +373,7 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\b(quang\s*nam|qnam)\b/gi, "qna");
     formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
     formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
+    formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
     if (formatted !== prev) wasFormatted = true;
 
     // 2) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
@@ -360,15 +399,66 @@ function formatInputMessage(text) {
     });
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: 2d/3d/4d suffix stripping (with or without space)
-    // Handles: 2dn, 2dt, 2dmn, 2dmt, 2dmnt, 2d n, 2d t, 2mn, 2mt → 2d (same for 3d, 4d)
+    // Rule: Remove invalid characters (;:.,@!#$%^&*) stuck to province names after parsing
+    // e.g. "hn; 37 b 4" → "hn 37 b 4", "kt: 50 da 1" → "kt 50 da 1"
     prev = formatted;
-    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|[nt])\b/gi, "2d");
-    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|[nt])\b/gi, "3d");
-    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|[nt])\b/gi, "4d");
-    formatted = formatted.replace(/\b2m[nt]\b/gi, "2d");
-    formatted = formatted.replace(/\b3m[nt]\b/gi, "3d");
-    formatted = formatted.replace(/\b4mn\b/gi, "4d");
+    formatted = formatted.replace(/([a-zA-Z]{2,})[;:.,@!#$%^&*]+/g, "$1");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Normalize đ/Đ → d in 2d/3d/4d bet-type suffixes
+    // Handles: 2đt→2dt, 3đmn→3dmn, 2 đt→2dt, đt→dt, đmn→dmn, etc.
+    prev = formatted;
+    formatted = formatted.replace(/([234])\s*[đĐ]/g, "$1d");
+    formatted = formatted.replace(/(^|[\s,;])[đĐ](mnt|mn|mt|[nt])/gm, "$1d$2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 2d/3d/4d suffix stripping (with or without space)
+    // Handles: 2dn, 2dt, 2dm, 2dr, 2dnn, 2dmm, 2dmn, 2dmt, 2dmnt → 2d (same for 3d, 4d)
+    // Also: 2nn, 2mm, 3nn, 3mm → 2d, 3d; 2 dn, 2 dt, 3 dmn, 2 d → 2d, 3d
+    prev = formatted;
+    formatted = formatted.replace(/\b([234])\s+d(mnt|mn|mt|nn|mm|[mnrt])?\b/gi, "$1d");
+    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "2d");
+    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "3d");
+    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "4d");
+    formatted = formatted.replace(/\b([234])(nn|mm|m[nrt])\b/gi, "$1d");
+    formatted = formatted.replace(/\b2m[nrt]/gi, "2d");
+    formatted = formatted.replace(/\b3m[nrt]/gi, "3d");
+    formatted = formatted.replace(/\b4m[nrt]/gi, "4d");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Insert space between 2d/3d/4d and immediately following digits
+    // e.g. "2d785" → "2d 785", "3d123" → "3d 123"
+    prev = formatted;
+    formatted = formatted.replace(/\b(2d|3d|4d)(\d)/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
+    prev = formatted;
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)(\d)/gi, "$1 $2 $3");
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)$/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
+    // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
+    // BUT ONLY turn it conditionally if ALL preceding bet numbers are EXACTLY 3 digits (124.345.456.665dui100 -> xdui).
+    // If it's mixed (e.g. 12 456 dau 10), it stays dau.
+    prev = formatted;
+    formatted = formatted.replace(/(^|\s|;)((?:\d+[\s;.,]+)*\d+)\s+((?:daodui|daodau|daoduoi|duoi|dui|dau)\b(?:[\s\d,]*\b(?:daodui|daodau|daoduoi|duoi|dui|dau)\b)*)/gi, function (m, prefix, numbers, rest) {
+      var nums = numbers.split(/[\s;.,]+/);
+      var all3 = nums.length > 0 && nums.every(function(n) { return n.length === 3; });
+      if (all3) {
+        var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
+          var t = kw.toLowerCase();
+          if (t === "daodui" || t === "daoduoi") return "xduoidao";
+          if (t === "daodau") return "xdaudao";
+          if (t === "duoi" || t === "dui") return "xduoi";
+          if (t === "dau") return "xdau";
+          return kw;
+        });
+        return prefix + numbers + " " + converted;
+      }
+      return m;
+    });
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Split 4+ consecutive digits with 'da' suffix
@@ -390,6 +480,12 @@ function formatInputMessage(text) {
     // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
     // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
     if (/\bda\b/i.test(formatted)) {
+      // Sub-rule: Normalize '.' separator between 4+ digit sequences to ';' (da lines only)
+      // e.g. "8886.9092.3232 da 2" → "8886;9092;3232 da 2" → then split into pairs
+      // BUT "12.34" (2-digit pairs) stays as-is
+      prev = formatted;
+      formatted = formatted.replace(/(\d{4,})\.(?=\d{4,})/g, "$1;");
+      if (formatted !== prev) wasFormatted = true;
       prev = formatted;
       formatted = formatted.replace(/\d{4,}/g, function (match) {
         if (match.length % 2 !== 0) {
@@ -402,6 +498,16 @@ function formatInputMessage(text) {
         }
         return pairs.join(" ");
       });
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: When line contains 'da', convert '05' or "0'5" to '0,5' ONLY after 'da'
+    // e.g. "89 98 da 05" → "89 98 da 0,5", "89 98 da 0'5" → "89 98 da 0,5"
+    // BUT "05 da 10" → "05" stays untouched (before da)
+    if (/\bda\b/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\bda\b.*?)(?<!\d)0'5(?!\d)/gi, "$10,5");
+      formatted = formatted.replace(/(\bda\b.*?)(?<!\d)05(?!\d)/gi, "$10,5");
       if (formatted !== prev) wasFormatted = true;
     }
 
@@ -971,8 +1077,8 @@ async function startUserbot() {
             const last = senderEntity.lastName || "";
             senderName = (first + " " + last).trim() || "unknown";
           } catch (e) {
-            logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
-            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) { }
+            logError("⚠️  [InputListener]", `Could not resolve sender ${message.senderId}: ${e.message}`);
+            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + message.senderId + ": " + e.message); } catch (_) { }
           }
         }
 
@@ -1036,18 +1142,14 @@ async function startUserbot() {
 
         forwardQueue.push(async () => {
           if (wasFormatted) {
-            // Message was reformatted → send the formatted text + extra info message
+            // Message was reformatted → send the formatted text
             log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
-            const infoMessage = senderName + " - " + groupName;
             const chatKeys = Object.keys(resolvedTargetChats);
             for (let ci = 0; ci < chatKeys.length; ci++) {
               const chatKey = chatKeys[ci];
               try {
                 await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
                 log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
-                // Send extra message with sender name + group name
-                await client.sendMessage(resolvedTargetChats[chatKey], { message: infoMessage });
-                log("📤 [InputListener]", `Userbot sent info "${infoMessage}" to chat ${chatKey}`);
               } catch (e) {
                 logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
                 try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
