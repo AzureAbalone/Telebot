@@ -154,12 +154,12 @@ function isQuietPeriod() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute;
 
-  // 16:15 - 16:20
-  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 20) return true;
-  // 17:15 - 17:25
-  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
-  // 18:15 - midnight
-  if (vnTime >= 18 * 60 + 15) return true;
+  // 16:09 - 16:20
+  if (vnTime >= 16 * 60 + 9 && vnTime <= 16 * 60 + 20) return true;
+  // 17:09 - 17:25
+  if (vnTime >= 17 * 60 + 9 && vnTime <= 17 * 60 + 25) return true;
+  // 18:09 - midnight
+  if (vnTime >= 18 * 60 + 9) return true;
 
   return false;
 }
@@ -184,7 +184,7 @@ function isPureBet(text) {
   if (!/\d/.test(lower)) return false;
 
   // 2) Must contain at least one bet keyword (including Vietnamese đ variants)
-  if (!/(dau|duoi|dui|dao|dd|xc|xd|da|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d)/i.test(lower)) return false;
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
@@ -316,6 +316,18 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
+    // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/daoxcdui/gi, "xduoidao");
+    formatted = formatted.replace(/daoxcdau/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: xcdaodui → xduoidao, xcdaodau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/xcdaodui/gi, "xduoidao");
+    formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
     prev = formatted;
     formatted = formatted.replace(/[đĐ][aáàảãạ]/g, "da");
@@ -344,8 +356,6 @@ function formatInputMessage(text) {
     prev = formatted;
     formatted = formatted.replace(/([a-zA-ZđĐ])\.([a-zA-ZđĐ])/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
-
-
 
     // Rule: Province abbreviations
     // 1) Specific common full-name provinces
@@ -402,12 +412,40 @@ function formatInputMessage(text) {
     // Also: 2 dn, 2 dt, 3 dmn, 2 d → 2d, 3d (space between digit and d-suffix)
     prev = formatted;
     formatted = formatted.replace(/\b([234])\s+d(mnt|mn|mt|[nt])?\b/gi, "$1d");
-    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|[nt])\b/gi, "2d");
-    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|[nt])\b/gi, "3d");
-    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|[nt])\b/gi, "4d");
-    formatted = formatted.replace(/\b2m[nt]\b/gi, "2d");
-    formatted = formatted.replace(/\b3m[nt]\b/gi, "3d");
-    formatted = formatted.replace(/\b4mn\b/gi, "4d");
+    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|[nt])/gi, "2d");
+    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|[nt])/gi, "3d");
+    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|[nt])/gi, "4d");
+    formatted = formatted.replace(/\b2m[nt]/gi, "2d");
+    formatted = formatted.replace(/\b3m[nt]/gi, "3d");
+    formatted = formatted.replace(/\b4mn/gi, "4d");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Insert space between 2d/3d/4d and immediately following digits
+    // e.g. "2d785" → "2d 785", "3d123" → "3d 123"
+    prev = formatted;
+    formatted = formatted.replace(/\b(2d|3d|4d)(\d)/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
+    prev = formatted;
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)(\d)/gi, "$1 $2 $3");
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)$/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
+    // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
+    prev = formatted;
+    formatted = formatted.replace(/(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
+      var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
+        var t = kw.toLowerCase();
+        if (t === "daodui" || t === "daoduoi") return "xduoidao";
+        if (t === "daodau") return "xdaudao";
+        if (t === "duoi" || t === "dui") return "xduoi";
+        if (t === "dau") return "xdau";
+        return kw;
+      });
+      return digits + converted;
+    });
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Split 4+ consecutive digits with 'da' suffix
@@ -482,6 +520,8 @@ function getLineGroup(lineArr) {
   var hasDau = false;
   var hasXcDau = false;
   var hasXcDuoi = false;
+  var hasXdaudao = false;
+  var hasXdaoDuoi = false;
 
   for (var i = 0; i < lineArr.length; i++) {
     var el = lineArr[i].toLowerCase();
@@ -492,6 +532,8 @@ function getLineGroup(lineArr) {
     if (el === "dau") hasDau = true;
     if (el === "xcdau" || el === "xdau") hasXcDau = true;
     if (el === "xcduoi" || el === "xcdui") hasXcDuoi = true;
+    if (el === "xdaudao") hasXdaudao = true;
+    if (el === "xduoidao" || el === "xdaodui" || el === "xdaoduoi") hasXdaoDuoi = true;
   }
 
   // Group 1: contains 'b'
@@ -506,12 +548,14 @@ function getLineGroup(lineArr) {
   // Group 4: contains 'duoi'/'dui' but NOT 'xc'
   if (hasDuoi && !hasXc) return 4;
 
-  // Group 5: xcdau / xdau / xc + dau
+  // Group 5: xcdau / xdau / xdaudao / xc + dau
   if (hasXcDau) return 5;
+  if (hasXdaudao) return 5;
   if (hasXc && hasDau) return 5;
 
-  // Group 6: xcduoi / xcdui / xc + duoi / xc + dui
+  // Group 6: xcduoi / xcdui / xduoidao / xc + duoi / xc + dui
   if (hasXcDuoi) return 6;
+  if (hasXdaoDuoi) return 6;
   if (hasXc && hasDuoi) return 6;
 
   // Group 7: only 'xc' (no duoi/dui/dau)
