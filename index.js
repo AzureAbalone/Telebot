@@ -918,6 +918,9 @@ async function startUserbot() {
       // Replace 'th' → 'hue' (Thừa Thiên Huế shorthand)
       result = result.replace(/\bth\b/gi, "hue");
 
+      // Replace 'baylo' → 'b7lo' (bay = bảy = 7)
+      result = result.replace(/\bbaylo\b/gi, "b7lo");
+
       log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
 
       // Only reply in allowed chats from chat.txt
