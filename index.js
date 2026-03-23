@@ -303,6 +303,13 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\bdat\b/gi, "da");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: xdau / xdui + 3-digit numbers → xc dau / xc duoi
+    prev = formatted;
+    formatted = formatted.replace(/\b(?:xcdau|xdau)(\s+)(?=\d{3}(?!\d))/gi, "xc dau$1");
+    formatted = formatted.replace(/\b(?:xcdui|xdui)(\s+)(?=\d{3}(?!\d))/gi, "xc duoi$1");
+    formatted = formatted.replace(/\bxc(\s+)(?=\d{3}(?!\d))/gi, "xc$1");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
     prev = formatted;
     formatted = formatted.replace(/daoxcdui/gi, "xduoidao");
