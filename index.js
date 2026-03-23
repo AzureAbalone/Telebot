@@ -183,8 +183,8 @@ function isPureBet(text) {
   // 1) Must have at least one digit (bets always contain numbers)
   if (!/\d/.test(lower)) return false;
 
-  // 2) Must contain at least one bet keyword (including Vietnamese đ variants)
-  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d)/i.test(lower)) return false;
+  // 2) Must contain at least one bet keyword OR amount pattern like 912x40
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
