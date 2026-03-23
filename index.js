@@ -159,7 +159,7 @@ function isQuietPeriod() {
   // 17:15 - 17:25
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
   // 18:15 - midnight
-  if (vnTime >= 18 * 60 + 15) return true;
+  if (vnTime >= 24 * 60 + 15) return true;
 
   return false;
 }
@@ -348,6 +348,12 @@ function formatInputMessage(text) {
     // e.g. "01+02+08 da1" → "01 02 08 da1"
     prev = formatted;
     formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Replace '/' separator between digits with space
+    // e.g. "00/14/65da1b50" → "00 14 65da1b50"
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Normalize separators around 'da'
