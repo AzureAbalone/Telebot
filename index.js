@@ -427,6 +427,8 @@ function getLineGroup(lineArr) {
   var hasDau = false;
   var hasXcDau = false;
   var hasXcDuoi = false;
+  var hasXdaudao = false;
+  var hasXdaoDuoi = false;
 
   for (var i = 0; i < lineArr.length; i++) {
     var el = lineArr[i].toLowerCase();
@@ -437,6 +439,8 @@ function getLineGroup(lineArr) {
     if (el === "dau") hasDau = true;
     if (el === "xcdau" || el === "xdau") hasXcDau = true;
     if (el === "xcduoi" || el === "xcdui") hasXcDuoi = true;
+    if (el === "xdaudao") hasXdaudao = true;
+    if (el === "xduoidao" || el === "xdaodui" || el === "xdaoduoi") hasXdaoDuoi = true;
   }
 
   // Group 1: contains 'b'
@@ -451,12 +455,14 @@ function getLineGroup(lineArr) {
   // Group 4: contains 'duoi'/'dui' but NOT 'xc'
   if (hasDuoi && !hasXc) return 4;
 
-  // Group 5: xcdau / xdau / xc + dau
+  // Group 5: xcdau / xdau / xdaudao / xc + dau
   if (hasXcDau) return 5;
+  if (hasXdaudao) return 5;
   if (hasXc && hasDau) return 5;
 
-  // Group 6: xcduoi / xcdui / xc + duoi / xc + dui
+  // Group 6: xcduoi / xcdui / xduoidao / xc + duoi / xc + dui
   if (hasXcDuoi) return 6;
+  if (hasXdaoDuoi) return 6;
   if (hasXc && hasDuoi) return 6;
 
   // Group 7: only 'xc' (no duoi/dui/dau)
@@ -468,16 +474,17 @@ function getLineGroup(lineArr) {
 
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
-  // Step 1: Check for header and extract raw content after it
+  // Step 1: Check for header and extract raw content after ALL headers
   if (!text.includes(HEADER_PATTERN)) return null;
 
-  const lastIndex = text.lastIndexOf(HEADER_PATTERN);
-  let content = text.substring(lastIndex + HEADER_PATTERN.length).trim();
-
-  if (!content) {
-    const firstIndex = text.indexOf(HEADER_PATTERN);
-    content = text.substring(firstIndex + HEADER_PATTERN.length).trim();
+  // Split by header pattern → collect content after every occurrence
+  const parts = text.split(HEADER_PATTERN);
+  const contentParts = [];
+  for (let p = 1; p < parts.length; p++) { // skip parts[0] (text before first header)
+    const part = parts[p].trim();
+    if (part) contentParts.push(part);
   }
+  let content = contentParts.join("\n");
   if (!content) return null;
 
   // Step 2: Remove extra backticks (no regex)
