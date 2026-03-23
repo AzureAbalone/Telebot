@@ -316,11 +316,6 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
-    // Rule: baylo → b7lo (bay = bảy = 7)
-    prev = formatted;
-    formatted = formatted.replace(/\bbaylo/gi, "b7lo");
-    if (formatted !== prev) wasFormatted = true;
-
     // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
     prev = formatted;
     formatted = formatted.replace(/daoxcdui/gi, "xduoidao");
