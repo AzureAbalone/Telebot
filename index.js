@@ -912,14 +912,14 @@ async function startUserbot() {
 
       log("📩 [Userbot]", `Header message detected from bot ${TARGET_BOT_ID} in chat ${chatId} | preview: ${preview(message.text)}`);
 
-      let result = processMessage(message.text);
+      // Replace 'baylo' → 'b7lo' BEFORE processMessage (so 'lo' in 'baylo' isn't parsed as bet keyword)
+      let rawText = message.text.replace(/\bbaylo\b/gi, "b7lo");
+
+      let result = processMessage(rawText);
       if (!result) return;
 
       // Replace 'th' → 'hue' (Thừa Thiên Huế shorthand)
       result = result.replace(/\bth\b/gi, "hue");
-
-      // Replace 'baylo' → 'b7lo' (bay = bảy = 7)
-      result = result.replace(/\bbaylo\b/gi, "b7lo");
 
       log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
 
