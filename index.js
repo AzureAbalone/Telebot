@@ -1008,13 +1008,16 @@ async function startUserbot() {
         let senderName = "unknown";
         if (message.senderId) {
           try {
-            const senderEntity = await client.getEntity(message.senderId);
+            // Try getSender() first (uses message context, works even for unseen users)
+            let senderEntity = await message.getSender();
+            if (!senderEntity) {
+              senderEntity = await client.getEntity(message.senderId);
+            }
             const first = senderEntity.firstName || "";
             const last = senderEntity.lastName || "";
             senderName = (first + " " + last).trim() || "unknown";
           } catch (e) {
             logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
-            try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Could not resolve sender " + senderId + ": " + e.message); } catch (_) { }
           }
         }
 
