@@ -333,6 +333,12 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/[đĐ][aáàảãạ]/g, "da");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Replace '+' separator between digits with space
+    // e.g. "01+02+08 da1" → "01 02 08 da1"
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: Normalize separators around 'da'
     // e.g. "0110-da1" → "0110 da 1", "77da0'5" → "77 da 0'5", "-da " → " da "
     prev = formatted;
