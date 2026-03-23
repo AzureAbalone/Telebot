@@ -459,8 +459,8 @@ function formatInputMessage(text) {
 
     // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
     prev = formatted;
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)(\d)/gi, "$1 $2 $3");
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)$/gi, "$1 $2");
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)(\d)/gi, "$1 $2 $3");
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)$/gi, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
@@ -494,6 +494,22 @@ function formatInputMessage(text) {
         pairs.push(digits.substr(i, 2));
       }
       return pairs.join(" ") + " da " + value;
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
+    // e.g. "008899 b 100" → "00 88 99 b 100"
+    prev = formatted;
+    formatted = formatted.replace(/(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
+      if (digits.length % 2 !== 0) {
+        errors.push("Odd digit count in \"" + match + "\"");
+        return match;
+      }
+      var pairs = [];
+      for (var i = 0; i < digits.length; i += 2) {
+        pairs.push(digits.substr(i, 2));
+      }
+      return pairs.join(" ") + " " + kw;
     });
     if (formatted !== prev) wasFormatted = true;
 
@@ -640,16 +656,19 @@ function processMessage(text) {
     if (!seg) continue;
     const words = seg.split(" ").filter(function (w) { return w !== ""; });
 
-    // Check if this segment has both lo/b AND dd → if so, skip n-splitting
+    // Check if this segment has both lo/b/b7lo AND dd → if so, skip n-splitting
+    // Also skip if segment has both b AND b7lo (same bet entry)
     var segHasLoOrB = false;
+    var segHasB7lo = false;
     var segHasDd = false;
     for (let chk = 0; chk < words.length; chk++) {
       var chkLower = words[chk].toLowerCase();
       if (chkLower === "lo" || chkLower === "b") segHasLoOrB = true;
+      if (chkLower === "b7lo") { segHasB7lo = true; segHasLoOrB = true; }
       if (chkLower === "dd") segHasDd = true;
     }
 
-    if (segHasLoOrB && segHasDd) {
+    if ((segHasLoOrB && segHasDd) || (segHasLoOrB && segHasB7lo)) {
       // Don't split at n boundaries — keep entire segment as one line
       segments.push(words.join(" "));
       continue;
