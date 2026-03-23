@@ -154,12 +154,12 @@ function isQuietPeriod() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute;
 
-  // 16:09 - 16:20
-  if (vnTime >= 16 * 60 + 9 && vnTime <= 16 * 60 + 20) return true;
-  // 17:09 - 17:25
-  if (vnTime >= 17 * 60 + 9 && vnTime <= 17 * 60 + 25) return true;
-  // 18:09 - midnight
-  if (vnTime >= 18 * 60 + 9) return true;
+  // 16:15 - 16:20
+  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 20) return true;
+  // 17:15 - 17:25
+  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
+  // 18:15 - midnight
+  if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
 }
