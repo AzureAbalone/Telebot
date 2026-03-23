@@ -447,8 +447,10 @@ function formatInputMessage(text) {
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
     // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
+    // BUT NOT when 3-digit number is an amount after a keyword (e.g. "dd 150 dau 200" stays as-is)
+    // (?<![a-zA-Z] ) prevents matching amounts like "dd 150", "b 200" etc.
     prev = formatted;
-    formatted = formatted.replace(/(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
+    formatted = formatted.replace(/(?<![a-zA-Z] )(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
       var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
         var t = kw.toLowerCase();
         if (t === "daodui" || t === "daoduoi") return "xduoidao";
