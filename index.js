@@ -159,7 +159,7 @@ function isQuietPeriod() {
   // 17:15 - 17:25
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
   // 18:15 - midnight
-  if (vnTime >= 24 * 60 + 15) return true;
+  if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
 }
@@ -538,7 +538,7 @@ function getLineGroup(lineArr) {
 
   for (var i = 0; i < lineArr.length; i++) {
     var el = lineArr[i].toLowerCase();
-    if (el === "b") hasB = true;
+    if (el === "b" || el === "2d") hasB = true;
     if (el === "dd") hasDd = true;
     if (el === "duoi" || el === "dui") hasDuoi = true;
     if (el === "xc") hasXc = true;
