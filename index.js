@@ -264,8 +264,14 @@ function replaceLoWithB(str) {
       (str[i] === "l" || str[i] === "L") &&
       (str[i + 1] === "o" || str[i + 1] === "O")
     ) {
-      result += "b";
-      i += 2;
+      // Skip lo→b if it's part of 'b7lo' pattern
+      if (i >= 2 && (str[i - 2] === "b" || str[i - 2] === "B") && str[i - 1] === "7") {
+        result += str[i];
+        i++;
+      } else {
+        result += "b";
+        i += 2;
+      }
     } else if (
       i + 1 < str.length &&
       (str[i] === "d" || str[i] === "D") &&
