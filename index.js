@@ -341,16 +341,16 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: xcduoidao → daodui, xcdaudao → daodau
+    // Rule: xcduoidao → xduoidao, xcdaudao → daodau
     prev = formatted;
-    formatted = formatted.replace(/xcduoidao/gi, "daodui");
+    formatted = formatted.replace(/xcduoidao/gi, "xduoidao");
     formatted = formatted.replace(/xcdaudao/gi, "daodau");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: duoidao/duidao → daodui, daudao → daodau (alternate word order normalization)
+    // Rule: duoidao/duidao → xduoidao, daudao → daodau (alternate word order normalization)
     prev = formatted;
-    formatted = formatted.replace(/duoidao/gi, "daodui");
-    formatted = formatted.replace(/duidao/gi, "daodui");
+    formatted = formatted.replace(/duoidao/gi, "xduoidao");
+    formatted = formatted.replace(/duidao/gi, "xduoidao");
     formatted = formatted.replace(/daudao/gi, "daodau");
     if (formatted !== prev) wasFormatted = true;
 
