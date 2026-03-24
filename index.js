@@ -335,8 +335,9 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/daoxcdau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: xcdaodui → xduoidao, xcdaodau → xdaudao
+    // Rule: xcdaoduoi/xcdaodui → xduoidao, xcdaodau → xdaudao
     prev = formatted;
+    formatted = formatted.replace(/xcdaoduoi/gi, "xduoidao");
     formatted = formatted.replace(/xcdaodui/gi, "xduoidao");
     formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
