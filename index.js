@@ -439,6 +439,8 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
     formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn");
     formatted = formatted.replace(/\b(dak\s*nong|d[.\s]+nong|dnong)\b/gi, "dno");
+    formatted = formatted.replace(/\b(soc\s*trang|s[.\s]+trang|strang)\b/gi, "st");
+    formatted = formatted.replace(/\b(can\s*tho|can[.\s]+tho|c[.\s]+tho|ctho)\b/gi, "ct");
     if (formatted !== prev) wasFormatted = true;
 
     // 2) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
@@ -511,6 +513,18 @@ function formatInputMessage(text) {
       });
     } while (formatted !== kwSepPrev);
     formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)$/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Re-run dao normalization after digit-keyword separation
+    // When digits were attached (e.g. 10duoidao30 → 10 duoidao 30), \b now matches
+    prev = formatted;
+    formatted = formatted.replace(/\bxcdao\b/gi, "xc dao");
+    formatted = formatted.replace(/\bduoidao\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bduidao\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaudao\b/gi, "xdaudao");
+    formatted = formatted.replace(/\bdaoduoi\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodui\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodau\b/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
