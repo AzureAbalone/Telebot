@@ -12,7 +12,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # 3. Application code: changes most often → last layers
-COPY index.js input.json ./
+COPY index.js ./
 COPY chat.txt ./
 
 # 4. Ensure non-root ownership
