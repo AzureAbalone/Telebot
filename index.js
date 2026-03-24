@@ -935,6 +935,9 @@ async function startUserbot() {
   log("✅ [Userbot]", "Logged in successfully!");
   log("🔑 [Userbot]", `SESSION_STRING=${savedSession}`);
 
+  // Store client reference globally for crash notification system
+  _userbotClient = client;
+
   // Listen for new messages
   client.addEventHandler(async (event) => {
     try {
@@ -1345,16 +1348,81 @@ async function main() {
 
 main();
 
-process.once("SIGINT", () => { bot.stop("SIGINT"); process.exit(0); });
-process.once("SIGTERM", () => { bot.stop("SIGTERM"); process.exit(0); });
+// ─── Crash Notification System ───────────────────────────────────
+// Global reference to the GramJS client so crash handlers can send urgent messages
+let _userbotClient = null;
 
-// Catch uncaught errors, log them, and exit so Render/Docker can auto-restart the bot.
-// Leaving the process running after an unhandled error causes "zombie" states where polling stops.
-process.on("uncaughtException", (err) => {
-  logError("⚠️  [CRASH]", "Uncaught exception:", err.message, err.stack);
+/**
+ * Send urgent crash notification to ERROR_CHAT_ID before the process dies.
+ * Tries userbot (GramJS) first — more reliable during crashes.
+ * Falls back to Telegraf bot API if userbot is unavailable.
+ * Waits up to 3 seconds for the message to be delivered.
+ */
+async function sendCrashNotification(reason, error) {
+  const timestamp = new Date().toISOString();
+  const errorMsg = error instanceof Error
+    ? `${error.message}\n\n${error.stack || ""}`
+    : String(error || "Unknown error");
+
+  const urgentMessage =
+    `🚨🚨🚨 BOT CRASH — URGENT 🚨🚨🚨\n\n` +
+    `⏰ Time: ${timestamp}\n` +
+    `💀 Reason: ${reason}\n` +
+    `📛 Error: ${errorMsg}\n\n` +
+    `⚠️ Bot is shutting down NOW. Auto-restart should kick in.`;
+
+  const promises = [];
+
+  // Try 1: Send via userbot (GramJS) — works even when Telegraf is dead
+  if (_userbotClient && _userbotClient.connected) {
+    promises.push(
+      _userbotClient.sendMessage(ERROR_CHAT_ID.toString(), { message: urgentMessage })
+        .then(() => log("🚨 [Crash]", "Urgent message sent via userbot"))
+        .catch((e) => logError("❌ [Crash]", "Userbot send failed:", e.message))
+    );
+  }
+
+  // Try 2: Send via Telegraf bot API — backup
+  promises.push(
+    bot.telegram.sendMessage(ERROR_CHAT_ID, urgentMessage)
+      .then(() => log("🚨 [Crash]", "Urgent message sent via Telegraf"))
+      .catch((e) => logError("❌ [Crash]", "Telegraf send failed:", e.message))
+  );
+
+  // Wait up to 3 seconds for at least one message to go through
+  try {
+    await Promise.race([
+      Promise.allSettled(promises),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch (_) {
+    // Best effort — don't let notification failure prevent exit
+  }
+}
+
+process.once("SIGINT", async () => {
+  logError("⚠️  [SHUTDOWN]", "Received SIGINT");
+  await sendCrashNotification("SIGINT (manual stop)", "Process interrupted by user");
+  bot.stop("SIGINT");
+  process.exit(0);
+});
+
+process.once("SIGTERM", async () => {
+  logError("⚠️  [SHUTDOWN]", "Received SIGTERM");
+  await sendCrashNotification("SIGTERM (system stop)", "Process terminated by system");
+  bot.stop("SIGTERM");
+  process.exit(0);
+});
+
+// Catch uncaught errors, send urgent notification, then exit so Render/Docker can auto-restart.
+process.on("uncaughtException", async (err) => {
+  logError("🚨 [CRASH]", "Uncaught exception:", err.message, err.stack);
+  await sendCrashNotification("Uncaught Exception", err);
   process.exit(1);
 });
-process.on("unhandledRejection", (err) => {
-  logError("⚠️  [CRASH]", "Unhandled rejection:", err.message || err);
+
+process.on("unhandledRejection", async (err) => {
+  logError("🚨 [CRASH]", "Unhandled rejection:", err?.message || err);
+  await sendCrashNotification("Unhandled Promise Rejection", err);
   process.exit(1);
 });
