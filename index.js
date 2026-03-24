@@ -379,6 +379,13 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Replace ',' separator between multi-digit groups with '.'
+    // e.g. "9538,3756b1" → "9538.3756b1"
+    // BUT NOT "da0,5" (single digit before comma = decimal amount)
+    prev = formatted;
+    formatted = formatted.replace(/(\d{2,}),(\d{2,})/g, "$1.$2");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: Normalize separators around 'da'
     // e.g. "0110-da1" → "0110 da 1", "77da0'5" → "77 da 0'5", "-da " → " da "
     prev = formatted;
