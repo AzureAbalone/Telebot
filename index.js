@@ -158,14 +158,14 @@ function isQuietPeriod() {
   const vnOffset = 7 * 60 * 60 * 1000;
   const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
 
-  // Thu & Sun: 16:12 - 16:25
+  // Thu & Sun: quiet 16:12 - 16:25 (MN ends earlier)
   if ((vnDay === 4 || vnDay === 0) && vnTime >= 16 * 60 + 12 && vnTime <= 16 * 60 + 25) return true;
 
-  // 16:15 - 16:25
+  // Normal days: quiet 16:15 - 16:25
   if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 25) return true;
-  // 17:15 - 17:25
+  // Quiet 17:15 - 17:25 (between MT and rest)
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
-  // 18:15 - midnight
+  // Quiet 18:15 - midnight (after rest period)
   if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
@@ -205,6 +205,8 @@ function escapeHtml(str) {
 }
 
 // ─── Helper: get VN time suffix for 2d/3d/4d keys ───────────────
+// Normal:   MN 12:00-16:15 | quiet 16:15-16:25 | MT 16:25-17:15 | quiet 17:15-17:25 | rest 17:25-18:15 | quiet 18:15+
+// Thu+Sun:  MN 12:00-16:12 | quiet 16:12-16:25 | MT 16:25-17:15 | same as above
 function getTimeSuffix() {
   // VN time = UTC+7
   const now = new Date();
@@ -212,13 +214,18 @@ function getTimeSuffix() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute; // total minutes since midnight
 
-  const mnStart = 12 * 60;       // 12:00
-  const mnEnd = 16 * 60 + 30;    // 16:30
-  const mtStart = 16 * 60 + 35;  // 16:35
-  const mtEnd = 17 * 60 + 30;    // 17:30
+  // VN day-of-week (0=Sun, 4=Thu)
+  const vnOffset = 7 * 60 * 60 * 1000;
+  const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
 
-  if (vnTime >= mnStart && vnTime <= mnEnd) return "mn";
-  if (vnTime >= mtStart && vnTime <= mtEnd) return "mt";
+  const mnStart = 12 * 60;                                        // 12:00
+  const mnEnd = (vnDay === 4 || vnDay === 0) ? 16 * 60 + 12       // Thu+Sun: 16:12
+                                             : 16 * 60 + 15;      // Normal:  16:15
+  const mtStart = 16 * 60 + 25;  // 16:25
+  const mtEnd = 17 * 60 + 15;    // 17:15
+
+  if (vnTime >= mnStart && vnTime < mnEnd) return "mn";
+  if (vnTime >= mtStart && vnTime < mtEnd) return "mt";
   return "";
 }
 
@@ -437,7 +444,7 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
     formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
     formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
-    formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn");
+    formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn"); // resolved to dnang/dnai by time in processMessage
     formatted = formatted.replace(/\b(dak\s*nong|d[.\s]+nong|dnong)\b/gi, "dno");
     formatted = formatted.replace(/\b(soc\s*trang|s[.\s]+trang|strang)\b/gi, "st");
     formatted = formatted.replace(/\b(can\s*tho|can[.\s]+tho|c[.\s]+tho|ctho)\b/gi, "ct");
@@ -795,12 +802,28 @@ function processMessage(text) {
 
     let transformedKey = replaceLoWithB(rawKey);
 
-    // Note: 'dn' = Đồng Nai (not Đà Nẵng, which is normalized to 'dnang' in formatInputMessage)
+    // Time-based resolution: 'dn' → 'dnang' (MT time) or 'dnai' (MN time)
+    if (transformedKey.toLowerCase() === "dn") {
+      const timeSuffix = getTimeSuffix();
+      if (timeSuffix === "mt") {
+        transformedKey = "dnang";
+      } else if (timeSuffix === "mn") {
+        transformedKey = "dnai";
+      }
+    }
 
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
       let tv = replaceLoWithB(values[v]);
-      // 'dn' = Đồng Nai (Đà Nẵng is already 'dnang' from formatInputMessage)
+      // Time-based resolution: 'dn' → 'dnang' (MT time) or 'dnai' (MN time)
+      if (tv.toLowerCase() === "dn") {
+        const timeSuffix = getTimeSuffix();
+        if (timeSuffix === "mt") {
+          tv = "dnang";
+        } else if (timeSuffix === "mn") {
+          tv = "dnai";
+        }
+      }
       transformedValues.push(tv);
     }
 
