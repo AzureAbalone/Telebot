@@ -154,12 +154,19 @@ function isQuietPeriod() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute;
 
-  // 16:15 - 16:20
-  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 20) return true;
+  // VN day-of-week (0=Sun, 4=Thu)
+  const vnOffset = 7 * 60 * 60 * 1000;
+  const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
+
+  // Thu & Sun: 16:12 - 16:25
+  if ((vnDay === 4 || vnDay === 0) && vnTime >= 16 * 60 + 12 && vnTime <= 16 * 60 + 25) return true;
+
+  // 16:15 - 16:25
+  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 25) return true;
   // 17:15 - 17:25
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
   // 18:15 - midnight
-  if (vnTime >= 24 * 60 + 15) return true;
+  if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
 }
