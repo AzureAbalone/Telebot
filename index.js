@@ -341,17 +341,24 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: xcduoidao → xduoidao, xcdaudao → daodau
+    // Rule: xcduoidao → xduoidao, xcdaudao → xdaudao
     prev = formatted;
     formatted = formatted.replace(/xcduoidao/gi, "xduoidao");
-    formatted = formatted.replace(/xcdaudao/gi, "daodau");
+    formatted = formatted.replace(/xcdaudao/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: duoidao/duidao → xduoidao, daudao → daodau (alternate word order normalization)
+    // Rule: duoidao/duidao/daudao → xduoidao/xdaudao
     prev = formatted;
     formatted = formatted.replace(/duoidao/gi, "xduoidao");
     formatted = formatted.replace(/duidao/gi, "xduoidao");
-    formatted = formatted.replace(/daudao/gi, "daodau");
+    formatted = formatted.replace(/daudao/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: daodui/daoduoi → xduoidao, daodau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/daoduoi/gi, "xduoidao");
+    formatted = formatted.replace(/daodui/gi, "xduoidao");
+    formatted = formatted.replace(/daodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
