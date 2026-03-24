@@ -341,10 +341,17 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: duoidao/duidao → daodui (alternate word order normalization)
+    // Rule: xcduoidao → daodui, xcdaudao → daodau
+    prev = formatted;
+    formatted = formatted.replace(/xcduoidao/gi, "daodui");
+    formatted = formatted.replace(/xcdaudao/gi, "daodau");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: duoidao/duidao → daodui, daudao → daodau (alternate word order normalization)
     prev = formatted;
     formatted = formatted.replace(/duoidao/gi, "daodui");
     formatted = formatted.replace(/duidao/gi, "daodui");
+    formatted = formatted.replace(/daudao/gi, "daodau");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
