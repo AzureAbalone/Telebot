@@ -498,11 +498,16 @@ function formatInputMessage(text) {
     // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
     // Note: 'b\d+' is matched BEFORE standalone 'b' to keep e.g. 'b1', 'b50' as one token
     prev = formatted;
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function(m, d1, kw, d2) {
-      // If kw already ends with digits (like b1, b50), don't add space after kw
-      if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
-      return d1 + " " + kw + " " + d2;
-    });
+    // Loop to handle adjacent keyword sequences like b100dau100duoi200
+    var kwSepPrev;
+    do {
+      kwSepPrev = formatted;
+      formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function(m, d1, kw, d2) {
+        // If kw already ends with digits (like b1, b50), don't add space after kw
+        if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
+        return d1 + " " + kw + " " + d2;
+      });
+    } while (formatted !== kwSepPrev);
     formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)$/gi, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
@@ -511,7 +516,7 @@ function formatInputMessage(text) {
     // BUT NOT when 3-digit number is an amount after a keyword (e.g. "dd 150 dau 200" stays as-is)
     // (?<![a-zA-Z] ) prevents matching amounts like "dd 150", "b 200" etc.
     prev = formatted;
-    formatted = formatted.replace(/(?<![a-zA-Z] )(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
+    formatted = formatted.replace(/(?<![a-zA-Z] )(?<![a-zA-Z])(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
       var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
         var t = kw.toLowerCase();
         if (t === "daodui" || t === "daoduoi") return "xduoidao";
