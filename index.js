@@ -423,8 +423,8 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\b(binh\s*dinh|bdinh)\b/gi, "bdi");
     formatted = formatted.replace(/\b(binh\s*phuoc|bphuoc)\b/gi, "bp");
     formatted = formatted.replace(/\b(binh\s*thuan|bthuan)\b/gi, "bth");
-    formatted = formatted.replace(/\b(quang\s*ngai|qngai)\b/gi, "qngai");
-    formatted = formatted.replace(/\b(quang\s*nam|qnam)\b/gi, "qna");
+    formatted = formatted.replace(/\b(quang\s*ngai|qngai)\b/gi, "qn");
+    formatted = formatted.replace(/\b(quang\s*nam|qnam|qna)\b/gi, "qn");
     formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
     formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
     formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
@@ -489,12 +489,12 @@ function formatInputMessage(text) {
     // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
     // Note: 'b\d+' is matched BEFORE standalone 'b' to keep e.g. 'b1', 'b50' as one token
     prev = formatted;
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function(m, d1, kw, d2) {
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function(m, d1, kw, d2) {
       // If kw already ends with digits (like b1, b50), don't add space after kw
       if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
       return d1 + " " + kw + " " + d2;
     });
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)$/gi, "$1 $2");
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)$/gi, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
@@ -534,7 +534,7 @@ function formatInputMessage(text) {
     // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
     // e.g. "008899 b 100" → "00 88 99 b 100"
     prev = formatted;
-    formatted = formatted.replace(/(?<!\.)(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
+    formatted = formatted.replace(/(?<!\.)(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
       if (digits.length % 2 !== 0) {
         errors.push("Odd digit count in \"" + match + "\"");
         return match;
@@ -745,15 +745,13 @@ function processMessage(text) {
 
     let transformedKey = replaceLoWithB(rawKey);
 
-    // Rename short keys: dn → dnang, qn → qngai
+    // Rename short keys: dn → dnang
     if (transformedKey === "dn") transformedKey = "dnang";
-    if (transformedKey === "qn") transformedKey = "qngai";
 
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
       let tv = replaceLoWithB(values[v]);
       if (tv === "dn") tv = "dnang";
-      if (tv === "qn") tv = "qngai";
       transformedValues.push(tv);
     }
 
