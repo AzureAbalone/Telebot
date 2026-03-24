@@ -347,18 +347,18 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/xcdaudao/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: duoidao/duidao/daudao → xduoidao/xdaudao
+    // Rule: duoidao/duidao/daudao → xduoidao/xdaudao (\b prevents matching inside xduoidao/xdaudao)
     prev = formatted;
-    formatted = formatted.replace(/duoidao/gi, "xduoidao");
-    formatted = formatted.replace(/duidao/gi, "xduoidao");
-    formatted = formatted.replace(/daudao/gi, "xdaudao");
+    formatted = formatted.replace(/\bduoidao/gi, "xduoidao");
+    formatted = formatted.replace(/\bduidao/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaudao/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: daodui/daoduoi → xduoidao, daodau → xdaudao
     prev = formatted;
-    formatted = formatted.replace(/daoduoi/gi, "xduoidao");
-    formatted = formatted.replace(/daodui/gi, "xduoidao");
-    formatted = formatted.replace(/daodau/gi, "xdaudao");
+    formatted = formatted.replace(/\bdaoduoi/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodui/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
