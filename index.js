@@ -1134,8 +1134,10 @@ async function startUserbot() {
 
         if (!matchedGroupId) return;
 
-        // Check quiet period
-        if (isQuietPeriod()) {
+        // Check quiet period (skip for exempt groups)
+        const QUIET_EXEMPT_GROUPS = ["-1003724203074"]; // test
+        const isExempt = QUIET_EXEMPT_GROUPS.some(g => matchedGroupId === g || matchedGroupId === g.replace(/^-100/, ""));
+        if (isQuietPeriod() && !isExempt) {
           log("🔇 [InputListener]", `Quiet period — skipping message in group ${matchedGroupId}`);
           return;
         }
@@ -1413,15 +1415,13 @@ async function sendCrashNotification(reason, error) {
 }
 
 process.once("SIGINT", async () => {
-  logError("⚠️  [SHUTDOWN]", "Received SIGINT");
-  await sendCrashNotification("SIGINT (manual stop)", "Process interrupted by user");
+  log("⚠️  [SHUTDOWN]", "Received SIGINT — graceful shutdown (no crash notification)");
   bot.stop("SIGINT");
   process.exit(0);
 });
 
 process.once("SIGTERM", async () => {
-  logError("⚠️  [SHUTDOWN]", "Received SIGTERM");
-  await sendCrashNotification("SIGTERM (system stop)", "Process terminated by system");
+  log("⚠️  [SHUTDOWN]", "Received SIGTERM — graceful shutdown (no crash notification)");
   bot.stop("SIGTERM");
   process.exit(0);
 });
