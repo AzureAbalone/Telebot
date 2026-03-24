@@ -1316,6 +1316,18 @@ async function main() {
 
   bot.launch();
   log("🤖 [Boot]", "Telegraf bot is running...");
+
+  // ─── 409 Conflict Prevention ─────────────────────────────────────
+  // Every 15 min, delete any stale webhook to prevent 409 conflicts
+  // that occur when Render spins up a new instance while an old one lingers.
+  setInterval(async () => {
+    try {
+      await bot.telegram.callApi("deleteWebhook", { drop_pending_updates: false });
+      log("🔄 [Keep-Alive]", "Cleared webhook (409 prevention)");
+    } catch (err) {
+      logError("⚠️  [Keep-Alive]", "Failed to clear webhook:", err.message || err);
+    }
+  }, 15 * 60 * 1000); // every 15 minutes
   log("📋 [Boot]", `ALLOWED_FORWARD_FROM: [${ALLOWED_FORWARD_FROM.join(", ")}]`);
   log("📋 [Boot]", `TARGET_BOT_ID: ${TARGET_BOT_ID}`);
 
