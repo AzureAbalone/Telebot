@@ -1348,10 +1348,13 @@ main();
 process.once("SIGINT", () => { bot.stop("SIGINT"); process.exit(0); });
 process.once("SIGTERM", () => { bot.stop("SIGTERM"); process.exit(0); });
 
-// Catch uncaught errors to prevent crashes
+// Catch uncaught errors, log them, and exit so Render/Docker can auto-restart the bot.
+// Leaving the process running after an unhandled error causes "zombie" states where polling stops.
 process.on("uncaughtException", (err) => {
   logError("⚠️  [CRASH]", "Uncaught exception:", err.message, err.stack);
+  process.exit(1);
 });
 process.on("unhandledRejection", (err) => {
   logError("⚠️  [CRASH]", "Unhandled rejection:", err.message || err);
+  process.exit(1);
 });
