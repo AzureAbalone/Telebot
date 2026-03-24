@@ -136,11 +136,18 @@ function isQuietPeriod() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute;
 
-  // 16:15 - 16:20
-  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 20) return true;
-  // 17:15 - 17:25
+  // VN day-of-week (0=Sun, 4=Thu)
+  const vnOffset = 7 * 60 * 60 * 1000;
+  const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
+
+  // Thu & Sun: quiet 16:12 - 16:25 (MN ends earlier)
+  if ((vnDay === 4 || vnDay === 0) && vnTime >= 16 * 60 + 12 && vnTime <= 16 * 60 + 25) return true;
+
+  // Normal days: quiet 16:15 - 16:25
+  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 25) return true;
+  // Quiet 17:15 - 17:25 (between MT and rest)
   if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
-  // 18:15 - midnight
+  // Quiet 18:15 - midnight (after rest period)
   if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
@@ -166,7 +173,7 @@ function isPureBet(text) {
   if (!/\d/.test(lower)) return false;
 
   // 2) Must contain at least one bet keyword OR amount pattern like 912x40
-  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d|\d+x\d)/i.test(lower)) return false;
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
@@ -180,6 +187,8 @@ function escapeHtml(str) {
 }
 
 // ─── Helper: get VN time suffix for 2d/3d/4d keys ───────────────
+// Normal:   MN 12:00-16:15 | quiet 16:15-16:25 | MT 16:25-17:15 | quiet 17:15-17:25 | rest 17:25-18:15 | quiet 18:15+
+// Thu+Sun:  MN 12:00-16:12 | quiet 16:12-16:25 | MT 16:25-17:15 | same as above
 function getTimeSuffix() {
   // VN time = UTC+7
   const now = new Date();
@@ -187,13 +196,18 @@ function getTimeSuffix() {
   const vnMinute = now.getUTCMinutes();
   const vnTime = vnHour * 60 + vnMinute; // total minutes since midnight
 
-  const mnStart = 12 * 60;       // 12:00
-  const mnEnd = 16 * 60 + 30;    // 16:30
-  const mtStart = 16 * 60 + 35;  // 16:35
-  const mtEnd = 17 * 60 + 30;    // 17:30
+  // VN day-of-week (0=Sun, 4=Thu)
+  const vnOffset = 7 * 60 * 60 * 1000;
+  const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
 
-  if (vnTime >= mnStart && vnTime <= mnEnd) return "mn";
-  if (vnTime >= mtStart && vnTime <= mtEnd) return "mt";
+  const mnStart = 12 * 60;                                        // 12:00
+  const mnEnd = (vnDay === 4 || vnDay === 0) ? 16 * 60 + 12       // Thu+Sun: 16:12
+                                             : 16 * 60 + 15;      // Normal:  16:15
+  const mtStart = 16 * 60 + 25;  // 16:25
+  const mtEnd = 17 * 60 + 15;    // 17:15
+
+  if (vnTime >= mnStart && vnTime < mnEnd) return "mn";
+  if (vnTime >= mtStart && vnTime < mtEnd) return "mt";
   return "";
 }
 
@@ -246,8 +260,14 @@ function replaceLoWithB(str) {
       (str[i] === "l" || str[i] === "L") &&
       (str[i + 1] === "o" || str[i + 1] === "O")
     ) {
-      result += "b";
-      i += 2;
+      // Skip lo→b if it's part of 'b7lo' pattern
+      if (i >= 2 && (str[i - 2] === "b" || str[i - 2] === "B") && str[i - 1] === "7") {
+        result += str[i];
+        i++;
+      } else {
+        result += "b";
+        i += 2;
+      }
     } else if (
       i + 1 < str.length &&
       (str[i] === "d" || str[i] === "D") &&
@@ -310,16 +330,31 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/daoxcdau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: xcdaodui → xduoidao, xcdaodau → xdaudao
+    // Rule: xcdaoduoi/xcdaodui → xduoidao, xcdaodau → xdaudao
     prev = formatted;
+    formatted = formatted.replace(/xcdaoduoi/gi, "xduoidao");
     formatted = formatted.replace(/xcdaodui/gi, "xduoidao");
     formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: duoidao/duidao → daodui (alternate word order normalization)
+    // Rule: xcduoidao → xduoidao, xcdaudao → xdaudao
     prev = formatted;
-    formatted = formatted.replace(/duoidao/gi, "daodui");
-    formatted = formatted.replace(/duidao/gi, "daodui");
+    formatted = formatted.replace(/xcduoidao/gi, "xduoidao");
+    formatted = formatted.replace(/xcdaudao/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: duoidao/duidao/daudao → xduoidao/xdaudao (\b prevents matching inside xduoidao/xdaudao)
+    prev = formatted;
+    formatted = formatted.replace(/\bduoidao/gi, "xduoidao");
+    formatted = formatted.replace(/\bduidao/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaudao/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: daodui/daoduoi → xduoidao, daodau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/\bdaoduoi/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodui/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodau/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
@@ -331,6 +366,19 @@ function formatInputMessage(text) {
     // e.g. "01+02+08 da1" → "01 02 08 da1"
     prev = formatted;
     formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Replace '/' separator between digits with space
+    // e.g. "00/14/65da1b50" → "00 14 65da1b50"
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Replace ',' separator between multi-digit groups with '.'
+    // e.g. "9538,3756b1" → "9538.3756b1"
+    // BUT NOT "da0,5" (single digit before comma = decimal amount)
+    prev = formatted;
+    formatted = formatted.replace(/(\d{2,}),(\d{2,})/g, "$1.$2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Normalize separators around 'da'
@@ -351,6 +399,13 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Province abbreviations with dot/space (B.lieu→blieu, Bl→blieu, B.tre→btre)
+    prev = formatted;
+    formatted = formatted.replace(/\bB\.?\s*lieu\b/gi, "blieu");
+    formatted = formatted.replace(/\bBl\b/gi, "blieu");
+    formatted = formatted.replace(/\bB\.?\s*tre\b/gi, "btre");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: Normalize '.' separator between letters to space
     // e.g. "k tum.k hoa" → "k tum k hoa" (dot used as visual separator, not decimal)
     prev = formatted;
@@ -366,15 +421,21 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\b(da\s*nang|dnang)\b/gi, "dnang");
     formatted = formatted.replace(/\b(kon\s*tum|kontum)\b/gi, "kt");
     formatted = formatted.replace(/\b(khanh\s*hoa|khanhhoa)\b/gi, "kh");
+    formatted = formatted.replace(/\b(ben\s*tre|b[.\s]*tre|b[.\s]*tr|btre|btr)\b/gi, "bt");
+    formatted = formatted.replace(/\b(vung\s*tau|vtau|v\s+tau)\b/gi, "vt");
     formatted = formatted.replace(/\b(binh\s*duong|bduong)\b/gi, "bd");
     formatted = formatted.replace(/\b(binh\s*dinh|bdinh)\b/gi, "bdi");
     formatted = formatted.replace(/\b(binh\s*phuoc|bphuoc)\b/gi, "bp");
     formatted = formatted.replace(/\b(binh\s*thuan|bthuan)\b/gi, "bth");
-    formatted = formatted.replace(/\b(quang\s*ngai|qngai)\b/gi, "qngai");
-    formatted = formatted.replace(/\b(quang\s*nam|qnam)\b/gi, "qna");
+    formatted = formatted.replace(/\b(quang\s*ngai|qngai)\b/gi, "qn");
+    formatted = formatted.replace(/\b(quang\s*nam|qnam|qna)\b/gi, "qn");
     formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
     formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
     formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
+    formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn"); // resolved to dnang/dnai by time in processMessage
+    formatted = formatted.replace(/\b(dak\s*nong|d[.\s]+nong|dnong)\b/gi, "dno");
+    formatted = formatted.replace(/\b(soc\s*trang|s[.\s]+trang|strang)\b/gi, "st");
+    formatted = formatted.replace(/\b(can\s*tho|can[.\s]+tho|c[.\s]+tho|ctho)\b/gi, "ct");
     if (formatted !== prev) wasFormatted = true;
 
     // 2) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
@@ -434,9 +495,31 @@ function formatInputMessage(text) {
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
+    // Note: 'b\d+' is matched BEFORE standalone 'b' to keep e.g. 'b1', 'b50' as one token
     prev = formatted;
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)(\d)/gi, "$1 $2 $3");
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|lo|b)$/gi, "$1 $2");
+    // Loop to handle adjacent keyword sequences like b100dau100duoi200
+    var kwSepPrev;
+    do {
+      kwSepPrev = formatted;
+      formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function(m, d1, kw, d2) {
+        // If kw already ends with digits (like b1, b50), don't add space after kw
+        if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
+        return d1 + " " + kw + " " + d2;
+      });
+    } while (formatted !== kwSepPrev);
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)$/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Re-run dao normalization after digit-keyword separation
+    // When digits were attached (e.g. 10duoidao30 → 10 duoidao 30), \b now matches
+    prev = formatted;
+    formatted = formatted.replace(/\bxcdao\b/gi, "xc dao");
+    formatted = formatted.replace(/\bduoidao\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bduidao\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaudao\b/gi, "xdaudao");
+    formatted = formatted.replace(/\bdaoduoi\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodui\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodau\b/gi, "xdaudao");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
@@ -444,7 +527,7 @@ function formatInputMessage(text) {
     // BUT NOT when 3-digit number is an amount after a keyword (e.g. "dd 150 dau 200" stays as-is)
     // (?<![a-zA-Z] ) prevents matching amounts like "dd 150", "b 200" etc.
     prev = formatted;
-    formatted = formatted.replace(/(?<![a-zA-Z] )(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
+    formatted = formatted.replace(/(?<![a-zA-Z] )(?<![a-zA-Z])(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
       var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
         var t = kw.toLowerCase();
         if (t === "daodui" || t === "daoduoi") return "xduoidao";
@@ -470,6 +553,22 @@ function formatInputMessage(text) {
         pairs.push(digits.substr(i, 2));
       }
       return pairs.join(" ") + " da " + value;
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
+    // e.g. "008899 b 100" → "00 88 99 b 100"
+    prev = formatted;
+    formatted = formatted.replace(/(?<!\.)(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
+      if (digits.length % 2 !== 0) {
+        errors.push("Odd digit count in \"" + match + "\"");
+        return match;
+      }
+      var pairs = [];
+      for (var i = 0; i < digits.length; i += 2) {
+        pairs.push(digits.substr(i, 2));
+      }
+      return pairs.join(" ") + " " + kw;
     });
     if (formatted !== prev) wasFormatted = true;
 
@@ -511,6 +610,26 @@ function formatInputMessage(text) {
     prev = formatted;
     formatted = formatted.replace(/\//g, ";");
     if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Strip 'x' prefix from xduoi/xdui/xdau when ALL number tokens are 2-digit
+    // The 'x' prefix (xiên) is only valid for 3-digit numbers.
+    // e.g. "11 00 xduoi 300" → "11 00 duoi 300" (2-digit numbers → strip x)
+    // but  "786 xduoi 300" stays as-is (3-digit number → keep x)
+    // Compound keywords like xduoidao/xdaudao are NOT affected.
+    (function () {
+      var numberTokens = formatted.match(/\b\d{2,3}\b/g);
+      if (numberTokens && numberTokens.length > 0) {
+        var hasThreeDigit = numberTokens.some(function (t) { return t.length === 3; });
+        if (!hasThreeDigit) {
+          prev = formatted;
+          // Strip x from xduoi/xdui/xdau but NOT from xduoidao/xdaudao/xdaodau/xdaodui/xdaoduoi
+          formatted = formatted.replace(/\bxduoi\b/gi, "duoi");
+          formatted = formatted.replace(/\bxdui\b/gi, "dui");
+          formatted = formatted.replace(/\bxdau\b/gi, "dau");
+          if (formatted !== prev) wasFormatted = true;
+        }
+      }
+    })();
 
     formattedLines.push(formatted);
   }
@@ -576,6 +695,9 @@ function getLineGroup(lineArr) {
 
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
+  // Replace 'baylo' → 'b7lo' BEFORE any parsing (so 'lo' in 'baylo' isn't parsed as bet keyword)
+  text = text.replace(/\bbaylo\b/gi, "b7lo");
+
   // Step 1: Check for header and extract raw content after ALL headers
   if (!text.includes(HEADER_PATTERN)) return null;
 
@@ -613,16 +735,19 @@ function processMessage(text) {
     if (!seg) continue;
     const words = seg.split(" ").filter(function (w) { return w !== ""; });
 
-    // Check if this segment has both lo/b AND dd → if so, skip n-splitting
+    // Check if this segment has both lo/b/b7lo AND dd → if so, skip n-splitting
+    // Also skip if segment has both b AND b7lo (same bet entry)
     var segHasLoOrB = false;
+    var segHasB7lo = false;
     var segHasDd = false;
     for (let chk = 0; chk < words.length; chk++) {
       var chkLower = words[chk].toLowerCase();
       if (chkLower === "lo" || chkLower === "b") segHasLoOrB = true;
+      if (chkLower === "b7lo") { segHasB7lo = true; segHasLoOrB = true; }
       if (chkLower === "dd") segHasDd = true;
     }
 
-    if (segHasLoOrB && segHasDd) {
+    if ((segHasLoOrB && segHasDd) || (segHasLoOrB && segHasB7lo)) {
       // Don't split at n boundaries — keep entire segment as one line
       segments.push(words.join(" "));
       continue;
@@ -665,15 +790,28 @@ function processMessage(text) {
 
     let transformedKey = replaceLoWithB(rawKey);
 
-    // Rename short keys: dn → dnang, qn → qngai
-    if (transformedKey === "dn") transformedKey = "dnang";
-    if (transformedKey === "qn") transformedKey = "qngai";
+    // Time-based resolution: 'dn' → 'dnang' (MT time) or 'dnai' (MN time)
+    if (transformedKey.toLowerCase() === "dn") {
+      const timeSuffix = getTimeSuffix();
+      if (timeSuffix === "mt") {
+        transformedKey = "dnang";
+      } else if (timeSuffix === "mn") {
+        transformedKey = "dnai";
+      }
+    }
 
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
       let tv = replaceLoWithB(values[v]);
-      if (tv === "dn") tv = "dnang";
-      if (tv === "qn") tv = "qngai";
+      // Time-based resolution: 'dn' → 'dnang' (MT time) or 'dnai' (MN time)
+      if (tv.toLowerCase() === "dn") {
+        const timeSuffix = getTimeSuffix();
+        if (timeSuffix === "mt") {
+          tv = "dnang";
+        } else if (timeSuffix === "mn") {
+          tv = "dnai";
+        }
+      }
       transformedValues.push(tv);
     }
 
@@ -867,6 +1005,9 @@ async function startUserbot() {
   log("✅ [Userbot]", "Logged in successfully!");
   log("🔑 [Userbot]", `SESSION_STRING=${savedSession}`);
 
+  // Store client reference globally for crash notification system
+  _userbotClient = client;
+
   // Listen for new messages
   client.addEventHandler(async (event) => {
     try {
@@ -894,8 +1035,11 @@ async function startUserbot() {
 
       log("📩 [Userbot]", `Header message detected from bot ${TARGET_BOT_ID} in chat ${chatId} | preview: ${preview(message.text)}`);
 
-      const result = processMessage(message.text);
+      let result = processMessage(message.text);
       if (!result) return;
+
+      // Replace 'th' → 'hue' (Thừa Thiên Huế shorthand)
+      result = result.replace(/\bth\b/gi, "hue");
 
       log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
 
@@ -950,6 +1094,18 @@ async function main() {
 
   bot.launch();
   log("🤖 [Boot]", "Telegraf bot is running...");
+
+  // ─── 409 Conflict Prevention ─────────────────────────────────────
+  // Every 15 min, delete any stale webhook to prevent 409 conflicts
+  // that occur when Render spins up a new instance while an old one lingers.
+  setInterval(async () => {
+    try {
+      await bot.telegram.callApi("deleteWebhook", { drop_pending_updates: false });
+      log("🔄 [Keep-Alive]", "Cleared webhook (409 prevention)");
+    } catch (err) {
+      logError("⚠️  [Keep-Alive]", "Failed to clear webhook:", err.message || err);
+    }
+  }, 15 * 60 * 1000); // every 15 minutes
   log("📋 [Boot]", `ALLOWED_FORWARD_FROM: [${ALLOWED_FORWARD_FROM.join(", ")}]`);
   log("📋 [Boot]", `TARGET_BOT_ID: ${TARGET_BOT_ID}`);
 
@@ -967,13 +1123,79 @@ async function main() {
 
 main();
 
-process.once("SIGINT", () => { bot.stop("SIGINT"); process.exit(0); });
-process.once("SIGTERM", () => { bot.stop("SIGTERM"); process.exit(0); });
+// ─── Crash Notification System ───────────────────────────────────
+// Global reference to the GramJS client so crash handlers can send urgent messages
+let _userbotClient = null;
 
-// Catch uncaught errors to prevent crashes
-process.on("uncaughtException", (err) => {
-  logError("⚠️  [CRASH]", "Uncaught exception:", err.message, err.stack);
+/**
+ * Send urgent crash notification to ERROR_CHAT_ID before the process dies.
+ * Tries userbot (GramJS) first — more reliable during crashes.
+ * Falls back to Telegraf bot API if userbot is unavailable.
+ * Waits up to 3 seconds for the message to be delivered.
+ */
+async function sendCrashNotification(reason, error) {
+  const timestamp = new Date().toISOString();
+  const errorMsg = error instanceof Error
+    ? `${error.message}\n\n${error.stack || ""}`
+    : String(error || "Unknown error");
+
+  const urgentMessage =
+    `🚨🚨🚨 BOT CRASH — URGENT 🚨🚨🚨\n\n` +
+    `⏰ Time: ${timestamp}\n` +
+    `💀 Reason: ${reason}\n` +
+    `📛 Error: ${errorMsg}\n\n` +
+    `⚠️ Bot is shutting down NOW. Auto-restart should kick in.`;
+
+  const promises = [];
+
+  // Try 1: Send via userbot (GramJS) — works even when Telegraf is dead
+  if (_userbotClient && _userbotClient.connected) {
+    promises.push(
+      _userbotClient.sendMessage(ERROR_CHAT_ID.toString(), { message: urgentMessage })
+        .then(() => log("🚨 [Crash]", "Urgent message sent via userbot"))
+        .catch((e) => logError("❌ [Crash]", "Userbot send failed:", e.message))
+    );
+  }
+
+  // Try 2: Send via Telegraf bot API — backup
+  promises.push(
+    bot.telegram.sendMessage(ERROR_CHAT_ID, urgentMessage)
+      .then(() => log("🚨 [Crash]", "Urgent message sent via Telegraf"))
+      .catch((e) => logError("❌ [Crash]", "Telegraf send failed:", e.message))
+  );
+
+  // Wait up to 3 seconds for at least one message to go through
+  try {
+    await Promise.race([
+      Promise.allSettled(promises),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch (_) {
+    // Best effort — don't let notification failure prevent exit
+  }
+}
+
+process.once("SIGINT", async () => {
+  log("⚠️  [SHUTDOWN]", "Received SIGINT — graceful shutdown (no crash notification)");
+  bot.stop("SIGINT");
+  process.exit(0);
 });
-process.on("unhandledRejection", (err) => {
-  logError("⚠️  [CRASH]", "Unhandled rejection:", err.message || err);
+
+process.once("SIGTERM", async () => {
+  log("⚠️  [SHUTDOWN]", "Received SIGTERM — graceful shutdown (no crash notification)");
+  bot.stop("SIGTERM");
+  process.exit(0);
+});
+
+// Catch uncaught errors, send urgent notification, then exit so Render/Docker can auto-restart.
+process.on("uncaughtException", async (err) => {
+  logError("🚨 [CRASH]", "Uncaught exception:", err.message, err.stack);
+  await sendCrashNotification("Uncaught Exception", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", async (err) => {
+  logError("🚨 [CRASH]", "Unhandled rejection:", err?.message || err);
+  await sendCrashNotification("Unhandled Promise Rejection", err);
+  process.exit(1);
 });
