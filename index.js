@@ -191,7 +191,7 @@ function isPureBet(text) {
   if (!/\d/.test(lower)) return false;
 
   // 2) Must contain at least one bet keyword OR amount pattern like 912x40
-  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d|\d+x\d)/i.test(lower)) return false;
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dao|dd|dau|duoi|dui|xc|xd|da|[234]d|đ[aáàảãạ]|đài|\dđ|lo|\db|\bb\d|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
@@ -419,6 +419,8 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\b(da\s*nang|dnang)\b/gi, "dnang");
     formatted = formatted.replace(/\b(kon\s*tum|kontum)\b/gi, "kt");
     formatted = formatted.replace(/\b(khanh\s*hoa|khanhhoa)\b/gi, "kh");
+    formatted = formatted.replace(/\b(ben\s*tre|b[.\s]*tre|b[.\s]*tr|btre|btr)\b/gi, "bt");
+    formatted = formatted.replace(/\b(vung\s*tau|vtau|v\s+tau)\b/gi, "vt");
     formatted = formatted.replace(/\b(binh\s*duong|bduong)\b/gi, "bd");
     formatted = formatted.replace(/\b(binh\s*dinh|bdinh)\b/gi, "bdi");
     formatted = formatted.replace(/\b(binh\s*phuoc|bphuoc)\b/gi, "bp");
@@ -585,6 +587,26 @@ function formatInputMessage(text) {
     prev = formatted;
     formatted = formatted.replace(/\//g, ";");
     if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Strip 'x' prefix from xduoi/xdui/xdau when ALL number tokens are 2-digit
+    // The 'x' prefix (xiên) is only valid for 3-digit numbers.
+    // e.g. "11 00 xduoi 300" → "11 00 duoi 300" (2-digit numbers → strip x)
+    // but  "786 xduoi 300" stays as-is (3-digit number → keep x)
+    // Compound keywords like xduoidao/xdaudao are NOT affected.
+    (function () {
+      var numberTokens = formatted.match(/\b\d{2,3}\b/g);
+      if (numberTokens && numberTokens.length > 0) {
+        var hasThreeDigit = numberTokens.some(function (t) { return t.length === 3; });
+        if (!hasThreeDigit) {
+          prev = formatted;
+          // Strip x from xduoi/xdui/xdau but NOT from xduoidao/xdaudao/xdaodau/xdaodui/xdaoduoi
+          formatted = formatted.replace(/\bxduoi\b/gi, "duoi");
+          formatted = formatted.replace(/\bxdui\b/gi, "dui");
+          formatted = formatted.replace(/\bxdau\b/gi, "dau");
+          if (formatted !== prev) wasFormatted = true;
+        }
+      }
+    })();
 
     formattedLines.push(formatted);
   }
