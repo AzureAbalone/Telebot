@@ -397,6 +397,13 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/dau\s+duoi/gi, "dd");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Province abbreviations with dot/space (B.lieu→blieu, Bl→blieu, B.tre→btre)
+    prev = formatted;
+    formatted = formatted.replace(/\bB\.?\s*lieu\b/gi, "blieu");
+    formatted = formatted.replace(/\bBl\b/gi, "blieu");
+    formatted = formatted.replace(/\bB\.?\s*tre\b/gi, "btre");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: Normalize '.' separator between letters to space
     // e.g. "k tum.k hoa" → "k tum k hoa" (dot used as visual separator, not decimal)
     prev = formatted;
@@ -480,9 +487,14 @@ function formatInputMessage(text) {
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
+    // Note: 'b\d+' is matched BEFORE standalone 'b' to keep e.g. 'b1', 'b50' as one token
     prev = formatted;
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)(\d)/gi, "$1 $2 $3");
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)$/gi, "$1 $2");
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function(m, d1, kw, d2) {
+      // If kw already ends with digits (like b1, b50), don't add space after kw
+      if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
+      return d1 + " " + kw + " " + d2;
+    });
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|daoxcdui|daoxcdau|xcduoi|xcdui|xcdau|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)$/gi, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
