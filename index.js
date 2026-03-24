@@ -437,6 +437,8 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
     formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
     formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
+    formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn");
+    formatted = formatted.replace(/\b(dak\s*nong|d[.\s]+nong|dnong)\b/gi, "dno");
     if (formatted !== prev) wasFormatted = true;
 
     // 2) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
@@ -779,13 +781,12 @@ function processMessage(text) {
 
     let transformedKey = replaceLoWithB(rawKey);
 
-    // Rename short keys: dn → dnang
-    if (transformedKey === "dn") transformedKey = "dnang";
+    // Note: 'dn' = Đồng Nai (not Đà Nẵng, which is normalized to 'dnang' in formatInputMessage)
 
     const transformedValues = [];
     for (let v = 0; v < values.length; v++) {
       let tv = replaceLoWithB(values[v]);
-      if (tv === "dn") tv = "dnang";
+      // 'dn' = Đồng Nai (Đà Nẵng is already 'dnang' from formatInputMessage)
       transformedValues.push(tv);
     }
 
