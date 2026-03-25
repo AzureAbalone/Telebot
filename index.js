@@ -368,6 +368,15 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: For da patterns, convert '/' and '.' between 4+ digit groups to ';'
+    // e.g. "6771/7176/7179da2,5" → "6771;7176;7179da2,5"
+    // e.g. "6771.7176.7179da2,5" → "6771;7176;7179da2,5"
+    if (/\d{4,}[\/.].*da/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\d{4,})[\/.](?=\d{4,})/g, "$1;");
+      if (formatted !== prev) wasFormatted = true;
+    }
+
     // Rule: Replace '/' separator between digits with space
     // e.g. "00/14/65da1b50" → "00 14 65da1b50"
     prev = formatted;
@@ -603,6 +612,14 @@ function formatInputMessage(text) {
       prev = formatted;
       formatted = formatted.replace(/(\bda\b.*?)(?<!\d)0'5(?!\d)/gi, "$10,5");
       formatted = formatted.replace(/(\bda\b.*?)(?<!\d)05(?!\d)/gi, "$10,5");
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: In da lines, convert comma to dot in amount after 'da'
+    // e.g. "da 2,5" → "da 2.5", "da 0,5" → "da 0.5"
+    if (/\bda\b/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\bda\s+\d+),(\d+)/gi, "$1.$2");
       if (formatted !== prev) wasFormatted = true;
     }
 
