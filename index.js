@@ -455,7 +455,7 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
     formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn"); // resolved to dnang/dnai by time in processMessage
     formatted = formatted.replace(/\b(dak\s*nong|d[.\s]+nong|dnong)\b/gi, "dno");
-    formatted = formatted.replace(/\b(soc\s*trang|s[.\s]+trang|strang)\b/gi, "st");
+    formatted = formatted.replace(/\b(soctrang|soc\s+trang|s[.\s]+trang|strang)\b/gi, "st");
     formatted = formatted.replace(/\b(can\s*tho|can[.\s]+tho|c[.\s]+tho|ctho)\b/gi, "ct");
     if (formatted !== prev) wasFormatted = true;
 
