@@ -496,17 +496,20 @@ function formatInputMessage(text) {
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 2d/3d/4d suffix stripping (with or without space)
-    // Handles: 2dn, 2dt, 2dm, 2dr, 2dnn, 2dmm, 2dmn, 2dmt, 2dmnt → 2d (same for 3d, 4d)
+    // Handles: 2dn, 2dt, 2dm, 2dr, 2dnn, 2dmm, 2dmn, 2dmt, 2dmnt, 2dmtr → 2d (same for 3d, 4d)
     // Also: 2nn, 2mm, 3nn, 3mm → 2d, 3d; 2 dn, 2 dt, 3 dmn, 2 d → 2d, 3d
+    // Also strips trailing ; : chars (e.g. 2dmn; → 2d, 3dmt: → 3d, 2d; → 2d)
     prev = formatted;
-    formatted = formatted.replace(/\b([234])\s+d(mnt|mn|mt|nn|mm|[mnrt])?\b/gi, "$1d");
-    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "2d");
-    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "3d");
-    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "4d");
-    formatted = formatted.replace(/\b([234])(nn|mm|m[nrt])\b/gi, "$1d");
-    formatted = formatted.replace(/\b2m[nrt]/gi, "2d");
-    formatted = formatted.replace(/\b3m[nrt]/gi, "3d");
-    formatted = formatted.replace(/\b4m[nrt]/gi, "4d");
+    formatted = formatted.replace(/\b([234])\s+d(mnt|mtr|mn|mt|nn|mm|[mnrt])?\s*[;:]*/gi, "$1d");
+    formatted = formatted.replace(/\b2d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "2d");
+    formatted = formatted.replace(/\b3d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "3d");
+    formatted = formatted.replace(/\b4d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "4d");
+    formatted = formatted.replace(/\b([234])(nn|mm|mtr|m[nrt])\s*[;:]*/gi, "$1d");
+    formatted = formatted.replace(/\b2m(tr|[nrt])\s*[;:]*/gi, "2d");
+    formatted = formatted.replace(/\b3m(tr|[nrt])\s*[;:]*/gi, "3d");
+    formatted = formatted.replace(/\b4m(tr|[nrt])\s*[;:]*/gi, "4d");
+    // Standalone 2d/3d/4d with trailing ; : (e.g. "2d;" → "2d")
+    formatted = formatted.replace(/\b([234]d)[;:]+/gi, "$1");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Insert space between 2d/3d/4d and immediately following digits
