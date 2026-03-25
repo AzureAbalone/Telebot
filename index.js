@@ -596,6 +596,16 @@ function formatInputMessage(text) {
     });
     if (formatted !== prev) wasFormatted = true;
 
+    // Rule: Re-run da separation after digit splitting
+    // When "326973 da3" is split to "32 69 73 da3", the "da3" still needs separating
+    // Case 1: digit directly before da (e.g. "73da3" → "73 da 3")
+    // Case 2: space before da, digits after (e.g. " da3" → " da 3")
+    prev = formatted;
+    formatted = formatted.replace(/(\d)(da)([0-9,']+)/gi, "$1 da $3");
+    formatted = formatted.replace(/(\d)(da)\b/gi, "$1 da");
+    formatted = formatted.replace(/\b(da)([0-9,']+)/gi, "da $2");
+    if (formatted !== prev) wasFormatted = true;
+
     // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
     // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
     if (/\bda\b/i.test(formatted)) {
