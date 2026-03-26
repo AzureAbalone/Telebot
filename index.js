@@ -484,8 +484,10 @@ function formatInputMessage(text) {
 
     // Rule: Remove invalid characters (;:.,@!#$%^&*) stuck to province names after parsing
     // e.g. "hn; 37 b 4" → "hn 37 b 4", "kt: 50 da 1" → "kt 50 da 1"
+    // Also handles space before punctuation: "mb ;" → "mb", "mb ; " → "mb "
     prev = formatted;
     formatted = formatted.replace(/([a-zA-Z]{2,})[;:.,@!#$%^&*]+/g, "$1");
+    formatted = formatted.replace(/([a-zA-Z]{2,})\s+[;:.,@!#$%^&*]+/g, "$1");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Normalize đ/Đ → d in 2d/3d/4d bet-type suffixes
