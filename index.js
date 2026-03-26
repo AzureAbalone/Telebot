@@ -423,7 +423,7 @@ function formatInputMessage(text) {
     // Rule: Province abbreviations with dot/space (B.lieu→blieu, Bl→blieu, B.tre→btre)
     prev = formatted;
     formatted = formatted.replace(/\bB\.?\s*lieu\b/gi, "blieu");
-    formatted = formatted.replace(/\bBl\b/gi, "blieu");
+    formatted = formatted.replace(/^Bl\b/i, "blieu");
     formatted = formatted.replace(/\bB\.?\s*tre\b/gi, "btre");
     if (formatted !== prev) wasFormatted = true;
 
@@ -550,10 +550,12 @@ function formatInputMessage(text) {
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
     // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
-    // BUT NOT when 3-digit number is an amount after a keyword (e.g. "dd 150 dau 200" stays as-is)
-    // (?<![a-zA-Z] ) prevents matching amounts like "dd 150", "b 200" etc.
+    // BUT NOT when 3-digit number is an amount after a bet keyword (e.g. "dd 150 dau 200" stays as-is)
+    // Uses callback to check if preceding word is a bet keyword instead of blanket lookbehind
     prev = formatted;
-    formatted = formatted.replace(/(?<![a-zA-Z] )(?<![a-zA-Z])(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
+    formatted = formatted.replace(/(?:^|(\S+)\s+)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,.]*)+)/gi, function (m, preceding, digits, rest) {
+      // If preceded by a bet keyword, this 3-digit number is an amount — don't convert
+      if (preceding && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|baylo|lo|b\d+|b)$/i.test(preceding)) return m;
       var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
         var t = kw.toLowerCase();
         if (t === "daodui" || t === "daoduoi") return "xduoidao";
@@ -562,7 +564,7 @@ function formatInputMessage(text) {
         if (t === "dau") return "xdau";
         return kw;
       });
-      return digits + converted;
+      return (preceding ? preceding + ' ' : '') + digits + converted;
     });
     if (formatted !== prev) wasFormatted = true;
 
