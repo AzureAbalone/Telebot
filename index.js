@@ -389,10 +389,10 @@ function formatInputMessage(text) {
       if (formatted !== prev) wasFormatted = true;
     }
 
-    // Rule: Replace '/' separator between digits with space
-    // e.g. "00/14/65da1b50" → "00 14 65da1b50"
+    // Rule: Replace '/' separator between digits with ';'
+    // e.g. "00/14/65da1b50" → "00;14;65da1b50"
     prev = formatted;
-    formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
+    formatted = formatted.replace(/(\d)\/(\d)/g, "$1;$2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Replace ',' separator between multi-digit groups with '.'
