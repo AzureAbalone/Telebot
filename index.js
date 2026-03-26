@@ -551,12 +551,13 @@ function formatInputMessage(text) {
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
     // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
     // BUT NOT when 3-digit number is an amount after a bet keyword (e.g. "dd 150 dau 200" stays as-is)
-    // Uses callback to check if preceding word is a bet keyword instead of blanket lookbehind
+    // Handles: "hn 191 duoi 20", "hn191duoi20", "191 duoi 20"
     prev = formatted;
-    formatted = formatted.replace(/(?:^|(\S+)\s+)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,.]*)+)/gi, function (m, preceding, digits, rest) {
+    formatted = formatted.replace(/(?:^|(\S+)\s+|([a-zA-Z]+))(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,.]*)+)/gi, function (m, precedingSpaced, precedingAttached, digits, rest) {
+      var preceding = precedingSpaced || precedingAttached || null;
       // If preceded by a bet keyword, this 3-digit number is an amount — don't convert
       if (preceding && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|baylo|lo|b\d+|b)$/i.test(preceding)) return m;
-      var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
+      var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)(?=\d|\s|$)/gi, function (kw) {
         var t = kw.toLowerCase();
         if (t === "daodui" || t === "daoduoi") return "xduoidao";
         if (t === "daodau") return "xdaudao";
@@ -564,7 +565,9 @@ function formatInputMessage(text) {
         if (t === "dau") return "xdau";
         return kw;
       });
-      return (preceding ? preceding + ' ' : '') + digits + converted;
+      // Insert space between keyword and attached digits (e.g. "xduoi20" → "xduoi 20")
+      converted = converted.replace(/(xduoidao|xdaudao|xduoi|xdau)(\d)/gi, "$1 $2");
+      return (preceding ? preceding + ' ' : '') + digits + ' ' + converted.trim();
     });
     if (formatted !== prev) wasFormatted = true;
 
