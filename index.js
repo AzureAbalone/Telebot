@@ -220,7 +220,7 @@ function getTimeSuffix() {
 
   const mnStart = 12 * 60;                                        // 12:00
   const mnEnd = (vnDay === 4 || vnDay === 0) ? 16 * 60 + 12       // Thu+Sun: 16:12
-                                             : 16 * 60 + 15;      // Normal:  16:15
+    : 16 * 60 + 15;      // Normal:  16:15
   const mtStart = 16 * 60 + 25;  // 16:25
   const mtEnd = 17 * 60 + 15;    // 17:15
 
@@ -527,7 +527,7 @@ function formatInputMessage(text) {
     var kwSepPrev;
     do {
       kwSepPrev = formatted;
-      formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function(m, d1, kw, d2) {
+      formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d+|b)(\d)/gi, function (m, d1, kw, d2) {
         // If kw already ends with digits (like b1, b50), don't add space after kw
         if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
         return d1 + " " + kw + " " + d2;
@@ -590,7 +590,7 @@ function formatInputMessage(text) {
     // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
     // e.g. "008899 b 100" → "00 88 99 b 100"
     prev = formatted;
-    formatted = formatted.replace(/(?<!\.)(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
+    formatted = formatted.replace(/(?<!\.)(?<!\d )(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
       if (digits.length % 2 !== 0) {
         errors.push("Odd digit count in \"" + match + "\"");
         return match;
