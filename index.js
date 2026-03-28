@@ -591,7 +591,9 @@ function formatInputMessage(text) {
     // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
     // e.g. "008899 b 100" → "00 88 99 b 100"
     prev = formatted;
-    formatted = formatted.replace(/(?<!\.)(?<!\d )(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
+    formatted = formatted.replace(/(?:(?:^|(?<=\s))(\S+)\s+)?(?<!\.)(?<!\d )(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, prevWord, digits, kw) {
+      // If preceding word is a bet keyword, these digits are an amount — don't split
+      if (prevWord && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d*|b)$/i.test(prevWord)) return match;
       if (digits.length % 2 !== 0) {
         errors.push("Odd digit count in \"" + match + "\"");
         return match;
@@ -600,7 +602,8 @@ function formatInputMessage(text) {
       for (var i = 0; i < digits.length; i += 2) {
         pairs.push(digits.substr(i, 2));
       }
-      return pairs.join(" ") + " " + kw;
+      var result = (prevWord ? prevWord + " " : "") + pairs.join(" ") + " " + kw;
+      return result;
     });
     if (formatted !== prev) wasFormatted = true;
 
