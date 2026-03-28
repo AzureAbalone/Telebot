@@ -191,7 +191,7 @@ function isPureBet(text) {
   if (!/\d/.test(lower)) return false;
 
   // 2) Must contain at least one bet keyword OR amount pattern like 912x40
-  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|dao|dd|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|dao|dd|dđ|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
