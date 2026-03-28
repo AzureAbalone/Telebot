@@ -786,17 +786,20 @@ function processMessage(text) {
 
     // Check if this segment has both lo/b/b7lo AND dd → if so, skip n-splitting
     // Also skip if segment has both b AND b7lo (same bet entry)
+    // Also skip if segment contains 'da' (the 'n' suffix is amount notation, not entry delimiter)
     var segHasLoOrB = false;
     var segHasB7lo = false;
     var segHasDd = false;
+    var segHasDa = false;
     for (let chk = 0; chk < words.length; chk++) {
       var chkLower = words[chk].toLowerCase();
       if (chkLower === "lo" || chkLower === "b") segHasLoOrB = true;
       if (chkLower === "b7lo") { segHasB7lo = true; segHasLoOrB = true; }
       if (chkLower === "dd") segHasDd = true;
+      if (/\b(da|dx|dat)\b/i.test(chkLower) || /\d(da|dx|dat)/i.test(chkLower)) segHasDa = true;
     }
 
-    if ((segHasLoOrB && segHasDd) || (segHasLoOrB && segHasB7lo)) {
+    if ((segHasLoOrB && segHasDd) || (segHasLoOrB && segHasB7lo) || segHasDa) {
       // Don't split at n boundaries — keep entire segment as one line
       segments.push(words.join(" "));
       continue;
