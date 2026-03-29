@@ -173,7 +173,7 @@ function isPureBet(text) {
   if (!/\d/.test(lower)) return false;
 
   // 2) Must contain at least one bet keyword OR amount pattern like 912x40
-  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|dao|dd|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|dao|dd|dđ|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
@@ -318,12 +318,6 @@ function formatInputMessage(text) {
     var formatted = lines[l];
     var prev;
 
-    // Rule: dat and dx -> da
-    prev = formatted;
-    formatted = formatted.replace(/\bdx\b/gi, "da");
-    formatted = formatted.replace(/\bdat\b/gi, "da");
-    if (formatted !== prev) wasFormatted = true;
-
     // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
     prev = formatted;
     formatted = formatted.replace(/daoxcdui/gi, "xduoidao");
@@ -368,10 +362,19 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: Replace '/' separator between digits with space
-    // e.g. "00/14/65da1b50" → "00 14 65da1b50"
+    // Rule: For da patterns, convert '/' and '.' between 4+ digit groups to ';'
+    // e.g. "6771/7176/7179da2,5" → "6771;7176;7179da2,5"
+    // e.g. "6771.7176.7179da2,5" → "6771;7176;7179da2,5"
+    if (/\d{4,}[\/.].*da/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\d{4,})[\/.](?=\d{4,})/g, "$1;");
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: Replace '/' separator between digits with ';'
+    // e.g. "00/14/65da1b50" → "00;14;65da1b50"
     prev = formatted;
-    formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
+    formatted = formatted.replace(/(\d)\/(\d)/g, "$1;$2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Replace ',' separator between multi-digit groups with '.'
@@ -402,7 +405,7 @@ function formatInputMessage(text) {
     // Rule: Province abbreviations with dot/space (B.lieu→blieu, Bl→blieu, B.tre→btre)
     prev = formatted;
     formatted = formatted.replace(/\bB\.?\s*lieu\b/gi, "blieu");
-    formatted = formatted.replace(/\bBl\b/gi, "blieu");
+    formatted = formatted.replace(/^Bl\b/i, "blieu");
     formatted = formatted.replace(/\bB\.?\s*tre\b/gi, "btre");
     if (formatted !== prev) wasFormatted = true;
 
@@ -433,8 +436,9 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
     formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
     formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn"); // resolved to dnang/dnai by time in processMessage
-    formatted = formatted.replace(/\b(dak\s*nong|d[.\s]+nong|dnong)\b/gi, "dno");
-    formatted = formatted.replace(/\b(soc\s*trang|s[.\s]+trang|strang)\b/gi, "st");
+    formatted = formatted.replace(/\b(da[ck]\s*n[oô]ng|d[.\s]+n[oô]ng|dn[oô]ng)\b/gi, "dno");
+    formatted = formatted.replace(/[đĐ][ắáăa][ck]\s*n[oô]ng/gi, "dno");
+    formatted = formatted.replace(/\b(soctrang|soc\s+trang|s[.\s]+trang|strang)\b/gi, "st");
     formatted = formatted.replace(/\b(can\s*tho|can[.\s]+tho|c[.\s]+tho|ctho)\b/gi, "ct");
     if (formatted !== prev) wasFormatted = true;
 
@@ -463,8 +467,10 @@ function formatInputMessage(text) {
 
     // Rule: Remove invalid characters (;:.,@!#$%^&*) stuck to province names after parsing
     // e.g. "hn; 37 b 4" → "hn 37 b 4", "kt: 50 da 1" → "kt 50 da 1"
+    // Also handles space before punctuation: "mb ;" → "mb", "mb ; " → "mb "
     prev = formatted;
     formatted = formatted.replace(/([a-zA-Z]{2,})[;:.,@!#$%^&*]+/g, "$1");
+    formatted = formatted.replace(/([a-zA-Z]{2,})\s+[;:.,@!#$%^&*]+/g, "$1");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Normalize đ/Đ → d in 2d/3d/4d bet-type suffixes
@@ -475,17 +481,20 @@ function formatInputMessage(text) {
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: 2d/3d/4d suffix stripping (with or without space)
-    // Handles: 2dn, 2dt, 2dm, 2dr, 2dnn, 2dmm, 2dmn, 2dmt, 2dmnt → 2d (same for 3d, 4d)
+    // Handles: 2dn, 2dt, 2dm, 2dr, 2dnn, 2dmm, 2dmn, 2dmt, 2dmnt, 2dmtr → 2d (same for 3d, 4d)
     // Also: 2nn, 2mm, 3nn, 3mm → 2d, 3d; 2 dn, 2 dt, 3 dmn, 2 d → 2d, 3d
+    // Also strips trailing ; : chars (e.g. 2dmn; → 2d, 3dmt: → 3d, 2d; → 2d)
     prev = formatted;
-    formatted = formatted.replace(/\b([234])\s+d(mnt|mn|mt|nn|mm|[mnrt])?\b/gi, "$1d");
-    formatted = formatted.replace(/\b2d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "2d");
-    formatted = formatted.replace(/\b3d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "3d");
-    formatted = formatted.replace(/\b4d\s*(mnt|mn|mt|nn|mm|[mnrt])/gi, "4d");
-    formatted = formatted.replace(/\b([234])(nn|mm|m[nrt])\b/gi, "$1d");
-    formatted = formatted.replace(/\b2m[nrt]/gi, "2d");
-    formatted = formatted.replace(/\b3m[nrt]/gi, "3d");
-    formatted = formatted.replace(/\b4m[nrt]/gi, "4d");
+    formatted = formatted.replace(/\b([234])\s+d(mnt|mtr|mn|mt|nn|mm|[mnrt])?\s*[;:]*/gi, "$1d");
+    formatted = formatted.replace(/\b2d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "2d");
+    formatted = formatted.replace(/\b3d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "3d");
+    formatted = formatted.replace(/\b4d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "4d");
+    formatted = formatted.replace(/\b([234])(nn|mm|mtr|m[nrt])\s*[;:]*/gi, "$1d");
+    formatted = formatted.replace(/\b2m(tr|[nrt])\s*[;:]*/gi, "2d");
+    formatted = formatted.replace(/\b3m(tr|[nrt])\s*[;:]*/gi, "3d");
+    formatted = formatted.replace(/\b4m(tr|[nrt])\s*[;:]*/gi, "4d");
+    // Standalone 2d/3d/4d with trailing ; : (e.g. "2d;" → "2d")
+    formatted = formatted.replace(/\b([234]d)[;:]+/gi, "$1");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Insert space between 2d/3d/4d and immediately following digits
@@ -524,11 +533,14 @@ function formatInputMessage(text) {
 
     // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
     // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
-    // BUT NOT when 3-digit number is an amount after a keyword (e.g. "dd 150 dau 200" stays as-is)
-    // (?<![a-zA-Z] ) prevents matching amounts like "dd 150", "b 200" etc.
+    // BUT NOT when 3-digit number is an amount after a bet keyword (e.g. "dd 150 dau 200" stays as-is)
+    // Handles: "hn 191 duoi 20", "hn191duoi20", "191 duoi 20"
     prev = formatted;
-    formatted = formatted.replace(/(?<![a-zA-Z] )(?<![a-zA-Z])(?<!\d)(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,]*)+)/gi, function (m, digits, rest) {
-      var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)\b/gi, function (kw) {
+    formatted = formatted.replace(/(?:^|(\S+)\s+|([a-zA-Z]+))(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,.]*)+)/gi, function (m, precedingSpaced, precedingAttached, digits, rest) {
+      var preceding = precedingSpaced || precedingAttached || null;
+      // If preceded by a bet keyword, this 3-digit number is an amount — don't convert
+      if (preceding && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|baylo|lo|b\d+|b)$/i.test(preceding)) return m;
+      var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)(?=\d|\s|$)/gi, function (kw) {
         var t = kw.toLowerCase();
         if (t === "daodui" || t === "daoduoi") return "xduoidao";
         if (t === "daodau") return "xdaudao";
@@ -536,7 +548,9 @@ function formatInputMessage(text) {
         if (t === "dau") return "xdau";
         return kw;
       });
-      return digits + converted;
+      // Insert space between keyword and attached digits (e.g. "xduoi20" → "xduoi 20")
+      converted = converted.replace(/(xduoidao|xdaudao|xduoi|xdau)(\d)/gi, "$1 $2");
+      return (preceding ? preceding + ' ' : '') + digits + ' ' + converted.trim();
     });
     if (formatted !== prev) wasFormatted = true;
 
@@ -558,8 +572,11 @@ function formatInputMessage(text) {
 
     // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
     // e.g. "008899 b 100" → "00 88 99 b 100"
+    // BUT NOT when preceded by a bet keyword (the digits are an amount)
     prev = formatted;
-    formatted = formatted.replace(/(?<!\.)(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, digits, kw) {
+    formatted = formatted.replace(/(?:(?:^|(?<=\s))(\S+)\s+)?(?<!\.)(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b)\b/gi, function (match, prevWord, digits, kw) {
+      // If preceding word is a bet keyword, these digits are an amount — don't split
+      if (prevWord && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|b7lo|lo|b\d*|b)$/i.test(prevWord)) return match;
       if (digits.length % 2 !== 0) {
         errors.push("Odd digit count in \"" + match + "\"");
         return match;
@@ -568,8 +585,18 @@ function formatInputMessage(text) {
       for (var i = 0; i < digits.length; i += 2) {
         pairs.push(digits.substr(i, 2));
       }
-      return pairs.join(" ") + " " + kw;
+      return (prevWord ? prevWord + ' ' : '') + pairs.join(" ") + " " + kw;
     });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Re-run da separation after digit splitting
+    // When "326973 da3" is split to "32 69 73 da3", the "da3" still needs separating
+    // Case 1: digit directly before da (e.g. "73da3" → "73 da 3")
+    // Case 2: space before da, digits after (e.g. " da3" → " da 3")
+    prev = formatted;
+    formatted = formatted.replace(/(\d)(da)([0-9,']+)/gi, "$1 da $3");
+    formatted = formatted.replace(/(\d)(da)\b/gi, "$1 da");
+    formatted = formatted.replace(/\b(da)([0-9,']+)/gi, "da $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
@@ -603,6 +630,14 @@ function formatInputMessage(text) {
       prev = formatted;
       formatted = formatted.replace(/(\bda\b.*?)(?<!\d)0'5(?!\d)/gi, "$10,5");
       formatted = formatted.replace(/(\bda\b.*?)(?<!\d)05(?!\d)/gi, "$10,5");
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: In da lines, convert comma to dot in amount after 'da'
+    // e.g. "da 2,5" → "da 2.5", "da 0,5" → "da 0.5"
+    if (/\bda\b/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\bda\s+\d+),(\d+)/gi, "$1.$2");
       if (formatted !== prev) wasFormatted = true;
     }
 
@@ -653,7 +688,7 @@ function getLineGroup(lineArr) {
 
   for (var i = 0; i < lineArr.length; i++) {
     var el = lineArr[i].toLowerCase();
-    if (el === "b" || el === "2d") hasB = true;
+    if (el === "b") hasB = true;
     if (el === "dd") hasDd = true;
     if (el === "duoi" || el === "dui") hasDuoi = true;
     if (el === "xc") hasXc = true;
@@ -737,17 +772,20 @@ function processMessage(text) {
 
     // Check if this segment has both lo/b/b7lo AND dd → if so, skip n-splitting
     // Also skip if segment has both b AND b7lo (same bet entry)
+    // Also skip if segment contains 'da' (the 'n' suffix is amount notation, not entry delimiter)
     var segHasLoOrB = false;
     var segHasB7lo = false;
     var segHasDd = false;
+    var segHasDa = false;
     for (let chk = 0; chk < words.length; chk++) {
       var chkLower = words[chk].toLowerCase();
       if (chkLower === "lo" || chkLower === "b") segHasLoOrB = true;
       if (chkLower === "b7lo") { segHasB7lo = true; segHasLoOrB = true; }
       if (chkLower === "dd") segHasDd = true;
+      if (/\b(da|dx|dat)\b/i.test(chkLower) || /\d(da|dx|dat)/i.test(chkLower)) segHasDa = true;
     }
 
-    if ((segHasLoOrB && segHasDd) || (segHasLoOrB && segHasB7lo)) {
+    if ((segHasLoOrB && segHasDd) || (segHasLoOrB && segHasB7lo) || segHasDa) {
       // Don't split at n boundaries — keep entire segment as one line
       segments.push(words.join(" "));
       continue;
