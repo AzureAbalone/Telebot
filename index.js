@@ -746,6 +746,103 @@ function getLineGroup(lineArr) {
   return 99;
 }
 
+// ─── Helper: Căn ăn mức — expand da lines with 3-6 nums into pairs ──
+const DA_SUBTRACT = { 3: 15, 4: 8, 5: 5, 6: 4 };
+
+// Parse a pure da line → { prefix, nums, aa }
+// Works with key prefix: "hn 01 02 03 da 40" → prefix="hn", nums=[01,02,03], aa=40
+function parseDaLine(line) {
+  const parts = line.trim().split(/\s+/);
+  const daIndex = parts.findIndex(p => p.toLowerCase() === 'da');
+  if (daIndex === -1) return null;
+
+  // Check this is a PURE da line: only numbers (and optional key prefix) before 'da'
+  // After da should be just the amount
+  const beforeDa = parts.slice(0, daIndex);
+  const afterDa = parts.slice(daIndex + 1);
+
+  // Extract number tokens (2-digit) from before da
+  const numTokens = beforeDa.filter(p => /^\d{2}$/.test(p));
+  const nonNumTokens = beforeDa.filter(p => !/^\d{2}$/.test(p));
+
+  // Must have only numbers + optional key prefix, and exactly one amount after da
+  if (numTokens.length < 3 || numTokens.length > 6) return null;
+  if (afterDa.length === 0) return null;
+
+  // Check no other bet keywords in the line (pure da only)
+  const betKeywords = /\b(b|dd|lo|b7lo|dau|duoi|dui|xc|xdau|xduoi|xdaudao|xduoidao)\b/i;
+  for (let i = 0; i < beforeDa.length; i++) {
+    if (betKeywords.test(beforeDa[i]) && beforeDa[i].toLowerCase() !== 'da') return null;
+  }
+
+  const aa = parseFloat(afterDa.join(''));
+  if (isNaN(aa)) return null;
+
+  // prefix = non-number tokens before da (e.g. "hn", "2d")
+  const prefix = nonNumTokens.join(' ');
+  return { prefix, nums: numTokens.sort(), count: numTokens.length, aa, line };
+}
+
+function getDaPairs(arr) {
+  const pairs = [];
+  for (let i = 0; i < arr.length; i++) {
+    for (let j = i + 1; j < arr.length; j++) {
+      pairs.push(arr[i] + '-' + arr[j]);
+    }
+  }
+  return pairs;
+}
+
+// Process all lines: expand pure da lines (3-6 nums) into pairs, dedup, subtract
+function processDaLines(resultText) {
+  const allLines = resultText.split('\n');
+  const daEntries = [];
+  const otherLines = []; // non-da or da with <3 nums
+
+  // Step 1: Parse all pure da lines with 3-6 numbers
+  allLines.forEach((line, idx) => {
+    if (/\bda\b/i.test(line)) {
+      const parsed = parseDaLine(line);
+      if (parsed) {
+        daEntries.push({ ...parsed, idx });
+        return;
+      }
+    }
+    otherLines.push({ idx, line });
+  });
+
+  if (daEntries.length === 0) return resultText; // nothing to process
+
+  // Step 2: Sort by count DESC (6→5→4→3) for priority
+  daEntries.sort((a, b) => b.count - a.count);
+
+  // Step 3: Expand pairs, dedup, subtract
+  const usedPairs = new Set();
+  const resultEntries = [];
+
+  daEntries.forEach(entry => {
+    const allPairs = getDaPairs(entry.nums);
+    const newPairs = allPairs.filter(pair => !usedPairs.has(pair));
+
+    if (newPairs.length === 0) return; // fully duplicate — skip
+
+    allPairs.forEach(pair => usedPairs.add(pair));
+
+    const rate = DA_SUBTRACT[entry.count] || 0;
+    const newAa = entry.aa - rate;
+
+    const pairsStr = newPairs.map(p => p.replace('-', ' ')).join('; ');
+    const output = (entry.prefix ? entry.prefix + ' ' : '') + pairsStr + ' dx ' + newAa + 'n';
+    resultEntries.push({ idx: entry.idx, output });
+  });
+
+  // Step 4: Merge back in original order
+  const allResults = [...otherLines.map(r => ({ idx: r.idx, output: r.line })), ...resultEntries];
+  allResults.sort((a, b) => a.idx - b.idx);
+
+  return allResults.map(r => r.output).join('\n');
+}
+
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
   // Replace 'baylo' → 'b7lo' BEFORE any parsing (so 'lo' in 'baylo' isn't parsed as bet keyword)
@@ -914,6 +1011,9 @@ function processMessage(text) {
 
   // Step 8: Replace '; ' with '/'
   result = replaceSemicolonSpace(result);
+
+  // Step 8b: Căn ăn mức — expand pure da lines (3-6 nums) into pairs
+  result = processDaLines(result);
 
   // Step 9: Split result by newline
   const lines = result.split("\n");
