@@ -762,8 +762,20 @@ function parseDaLine(line) {
 
   // Check this is a PURE da line: only numbers (and optional key prefix) before 'da'
   // After da should be just the amount
-  const beforeDa = parts.slice(0, daIndex);
+  const rawBeforeDa = parts.slice(0, daIndex);
   const afterDa = parts.slice(daIndex + 1);
+
+  // Expand dot/semicolon-separated digit groups: "02.20.22.72" → ["02","20","22","72"]
+  const beforeDa = [];
+  for (let i = 0; i < rawBeforeDa.length; i++) {
+    const token = rawBeforeDa[i];
+    if (/^\d{2,}([.;\/]\d{2,})+$/.test(token)) {
+      const subTokens = token.split(/[.;\/]/);
+      for (let s = 0; s < subTokens.length; s++) beforeDa.push(subTokens[s]);
+    } else {
+      beforeDa.push(token);
+    }
+  }
 
   // Extract number tokens (2-digit) from before da
   const numTokens = beforeDa.filter(p => /^\d{2}$/.test(p));
