@@ -687,7 +687,11 @@ function formatInputMessage(text) {
     formattedLines.push(formatted);
   }
 
-  return { formatted: formattedLines.join("\n"), wasFormatted: wasFormatted, errors: errors };
+  // Căn ăn mức — expand pure da lines (3-6 nums) into pairs, dedup, subtract
+  var joined = formattedLines.join("\n");
+  joined = processDaLines(joined);
+
+  return { formatted: joined, wasFormatted: wasFormatted, errors: errors };
 }
 
 // ─── Helper: classify line for custom sort order ────────────────
@@ -1011,9 +1015,6 @@ function processMessage(text) {
 
   // Step 8: Replace '; ' with '/'
   result = replaceSemicolonSpace(result);
-
-  // Step 8b: Căn ăn mức — expand pure da lines (3-6 nums) into pairs
-  result = processDaLines(result);
 
   // Step 9: Split result by newline
   const lines = result.split("\n");
