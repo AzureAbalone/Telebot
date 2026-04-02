@@ -188,7 +188,7 @@ function isPureBet(text) {
   if (!/\d/.test(lower)) return false;
 
   // 2) Must contain at least one bet keyword OR amount pattern like 912x40
-  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|bao|dao|dd|dđ|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối|đuoi)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|bao|keo|dao|dd|dđ|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối|đuoi)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
@@ -530,13 +530,13 @@ function formatInputMessage(text) {
     var kwSepPrev;
     do {
       kwSepPrev = formatted;
-      formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|b7lo|lo|b\d+|b)(\d)/gi, function (m, d1, kw, d2) {
+      formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b\d+|b)(\d)/gi, function (m, d1, kw, d2) {
         // If kw already ends with digits (like b1, b50), don't add space after kw
         if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
         return d1 + " " + kw + " " + d2;
       });
     } while (formatted !== kwSepPrev);
-    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|b7lo|lo|b\d+|b)$/gi, "$1 $2");
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b\d+|b)$/gi, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Re-run dao normalization after digit-keyword separation
@@ -559,7 +559,7 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/(?:^|(\S+)\s+|([a-zA-Z]+))(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,.]*)+)/gi, function (m, precedingSpaced, precedingAttached, digits, rest) {
       var preceding = precedingSpaced || precedingAttached || null;
       // If preceded by a bet keyword, this 3-digit number is an amount — don't convert
-      if (preceding && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|b7lo|baylo|lo|b\d+|b)$/i.test(preceding)) return m;
+      if (preceding && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|baylo|lo|b\d+|b)$/i.test(preceding)) return m;
       var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)(?=\d|\s|$)/gi, function (kw) {
         var t = kw.toLowerCase();
         if (t === "daodui" || t === "daoduoi") return "xduoidao";
@@ -593,9 +593,9 @@ function formatInputMessage(text) {
     // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
     // e.g. "008899 b 100" → "00 88 99 b 100"
     prev = formatted;
-    formatted = formatted.replace(/(?:(?:^|(?<=\s))(\S+)\s+)?(?<!\.)(?<!\d )(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|b7lo|lo|b)\b/gi, function (match, prevWord, digits, kw) {
+    formatted = formatted.replace(/(?:(?:^|(?<=\s))(\S+)\s+)?(?<!\.)(?<!\d )(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b)\b/gi, function (match, prevWord, digits, kw) {
       // If preceding word is a bet keyword, these digits are an amount — don't split
-      if (prevWord && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|b7lo|lo|b\d*|b)$/i.test(prevWord)) return match;
+      if (prevWord && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b\d*|b)$/i.test(prevWord)) return match;
       // If keyword is 'b' and digits are exactly 4 and line has no 'da' → don't split
       if (/^b$/i.test(kw) && digits.length === 4 && !/\bda\b/i.test(formatted)) return match;
       if (digits.length % 2 !== 0) {
