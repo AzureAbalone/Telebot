@@ -158,15 +158,12 @@ function isQuietPeriod() {
   const vnOffset = 7 * 60 * 60 * 1000;
   const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
 
-  // Thu & Sun: quiet 16:12 - 16:25 (MN ends earlier)
-  if ((vnDay === 4 || vnDay === 0) && vnTime >= 16 * 60 + 12 && vnTime <= 16 * 60 + 25) return true;
-
-  // Normal days: quiet 16:15 - 16:25
-  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 25) return true;
-  // Quiet 17:15 - 17:25 (between MT and rest)
-  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
-  // Quiet 18:15 - midnight (after rest period)
-  if (vnTime >= 18 * 60 + 15) return true;
+  // Normal days: quiet 16:08 - 16:25
+  if (vnTime >= 16 * 60 + 8 && vnTime <= 16 * 60 + 25) return true;
+  // Quiet 17:08 - 17:25 (between MT and rest)
+  if (vnTime >= 17 * 60 + 8 && vnTime <= 17 * 60 + 25) return true;
+  // Quiet 18:08 - midnight (after rest period)
+  if (vnTime >= 18 * 60 + 8) return true;
 
   return false;
 }
