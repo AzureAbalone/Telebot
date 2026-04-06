@@ -158,12 +158,12 @@ function isQuietPeriod() {
   const vnOffset = 7 * 60 * 60 * 1000;
   const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
 
-  // Normal days: quiet 16:08 - 16:25
-  if (vnTime >= 16 * 60 + 8 && vnTime <= 16 * 60 + 25) return true;
-  // Quiet 17:08 - 17:25 (between MT and rest)
-  if (vnTime >= 17 * 60 + 8 && vnTime <= 17 * 60 + 25) return true;
-  // Quiet 18:08 - midnight (after rest period)
-  if (vnTime >= 18 * 60 + 8) return true;
+  // Normal days: quiet 16:15 - 16:25
+  if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 25) return true;
+  // Quiet 17:15 - 17:25 (between MT and rest)
+  if (vnTime >= 17 * 60 + 15 && vnTime <= 17 * 60 + 25) return true;
+  // Quiet 18:15 - midnight (after rest period)
+  if (vnTime >= 18 * 60 + 15) return true;
 
   return false;
 }
@@ -1257,6 +1257,14 @@ async function startUserbot() {
         const isExempt = QUIET_EXEMPT_GROUPS.some(g => matchedGroupId === g || matchedGroupId === g.replace(/^-100/, ""));
         if (isQuietPeriod() && !isExempt) {
           log("🔇 [InputListener]", `Quiet period — skipping message in group ${matchedGroupId}`);
+          try {
+            await client.sendMessage(chatId, {
+              message: "Đã hết giờ nhận số tin không OK không chịu trách nhiệm",
+              replyTo: message.id,
+            });
+          } catch (e) {
+            logError("❌ [InputListener]", `Failed to send quiet period reply: ${e && e.message ? e.message : e}`);
+          }
           return;
         }
 
