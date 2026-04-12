@@ -382,26 +382,34 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: For da patterns, convert '/' and '.' between 4+ digit groups to ';'
-    // e.g. "6771/7176/7179da2,5" → "6771;7176;7179da2,5"
+    // Rule: For da patterns, convert '.' between 4+ digit groups to ';'
     // e.g. "6771.7176.7179da2,5" → "6771;7176;7179da2,5"
+    // Also handles '.' already converted from ',' (e.g. "6771/7176/7179da2.5")
+    // Uses (?=.{4}(?=;)) to check position+4 is ';' — this prevents matching
+    // across semicolons that came from '/' (valid group separators).
     if (/\d{4,}[\/.].*da/i.test(formatted)) {
       prev = formatted;
-      formatted = formatted.replace(/(\d{4,})[\/.](?=\d{4,})/g, "$1;");
+      formatted = formatted.replace(/(\d{4,})[\.;](?=.{4}(?=;))/g, "$1;");
       if (formatted !== prev) wasFormatted = true;
     }
-
-    // Rule: Replace '/' separator between digits with ' '
-    // e.g. "06/60/07da20" → "06 60 07da20"
-    prev = formatted;
-    formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
-    if (formatted !== prev) wasFormatted = true;
 
     // Rule: Replace ',' separator between multi-digit groups with '.'
     // e.g. "9538,3756b1" → "9538.3756b1"
     // BUT NOT "da0,5" (single digit before comma = decimal amount)
     prev = formatted;
     formatted = formatted.replace(/(\d{2,}),(\d{2,})/g, "$1.$2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: '/' → ';'
+    // Converts group separators like "95/04" → "95;04"
+    prev = formatted;
+    formatted = formatted.replace(/\//g, ";");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Replace '/' separator between digits with ' '
+    // e.g. "06/60/07da20" → "06 60 07da20"
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Normalize separators around 'da'
