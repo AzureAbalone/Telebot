@@ -21,8 +21,8 @@ USER telebot
 
 # 5. Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:${PORT:-7777}/health || exit 1
+  CMD wget -qO- http://localhost:${PORT:-7780}/health || exit 1
 
-EXPOSE ${PORT:-7777}
+EXPOSE ${PORT:-7780}
 
 CMD ["node", "index.js"]
