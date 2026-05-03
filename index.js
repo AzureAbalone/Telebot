@@ -934,7 +934,7 @@ function processMessage(text) {
   }
 
   // Step 11: Return lines in original order (sorting disabled)
-  const result = nested.map(function (lineArr) { return lineArr.join(" "); }).join("\n");
+  result = nested.map(function (lineArr) { return lineArr.join(" "); }).join("\n");
 
   return result;
 }
