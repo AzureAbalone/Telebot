@@ -780,16 +780,8 @@ function processMessage(text) {
   content = removeBackticks(content).trim();
   if (!content) return null;
 
-  // Step 3: Normalize newlines to commas, then separate by ','
-  var normalized = "";
-  for (var c = 0; c < content.length; c++) {
-    if (content[c] === "\n" || content[c] === "\r") {
-      normalized += ",";
-    } else {
-      normalized += content[c];
-    }
-  }
-  const rawSegments = normalized.split(",");
+  // Step 3: Disable comma splitting - split by newlines only
+  const rawSegments = content.split(/\n|\r/).filter(s => s.trim());
 
   // Step 3b: Further split segments at 'n' boundaries (not 'tn')
   // e.g. "11 dd 360n 49 67 79 dd 10n" → ["11 dd 360n", "49 67 79 dd 10n"]
@@ -941,28 +933,8 @@ function processMessage(text) {
     }
   }
 
-  // Step 11: Sort by custom group order, preserving relative order within groups
-  const GROUP_ORDER = [1, 2, 3, 4, 5, 6, 7, 99];
-  const lineGroups = {};
-  for (let ni = 0; ni < nested.length; ni++) {
-    const g = getLineGroup(nested[ni]);
-    if (!lineGroups[g]) lineGroups[g] = [];
-    lineGroups[g].push(nested[ni]);
-  }
-
-  const resultParts = [];
-  for (let gi = 0; gi < GROUP_ORDER.length; gi++) {
-    const gid = GROUP_ORDER[gi];
-    if (lineGroups[gid] && lineGroups[gid].length > 0) {
-      const groupLines = [];
-      for (let gj = 0; gj < lineGroups[gid].length; gj++) {
-        groupLines.push(lineGroups[gid][gj].join(" "));
-      }
-      resultParts.push(groupLines.join("\n"));
-    }
-  }
-
-  result = resultParts.join("\n\n");
+  // Step 11: Return lines in original order (sorting disabled)
+  const result = nested.map(function (lineArr) { return lineArr.join(" "); }).join("\n");
 
   return result;
 }
