@@ -400,10 +400,10 @@ function formatInputMessage(text) {
     formatted = formatted.replace(/(\d{2,}),(\d{2,})/g, "$1.$2");
     if (formatted !== prev) wasFormatted = true;
 
-    // Rule: '/' → ';'
-    // Converts group separators like "95/04" → "95;04"
+    // Rule: '/' → ' '
+    // Converts group separators like "95/04" → "95 04"
     prev = formatted;
-    formatted = formatted.replace(/\//g, ";");
+    formatted = formatted.replace(/\//g, " ");
     if (formatted !== prev) wasFormatted = true;
 
     // Rule: Replace '/' separator between digits with ' '
