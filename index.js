@@ -632,11 +632,11 @@ function formatInputMessage(text) {
     // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
     // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
     if (/\bda\b/i.test(formatted)) {
-      // Sub-rule: Normalize '.' separator between 4+ digit sequences to ';' (da lines only)
-      // e.g. "8886.9092.3232 da 2" → "8886;9092;3232 da 2" → then split into pairs
+      // Sub-rule: Normalize '.' separator between 4+ digit sequences to space (da lines only)
+      // e.g. "8886.9092.3232 da 2" → "8886 9092 3232 da 2" → then split into pairs
       // BUT "12.34" (2-digit pairs) stays as-is
       prev = formatted;
-      formatted = formatted.replace(/(\d{4,})\.(?=\d{4,})/g, "$1;");
+      formatted = formatted.replace(/(\d{4,})\.(?=\d{4,})/g, "$1 ");
       if (formatted !== prev) wasFormatted = true;
       prev = formatted;
       formatted = formatted.replace(/\d{4,}/g, function (match) {
