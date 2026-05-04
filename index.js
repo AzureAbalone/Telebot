@@ -78,6 +78,7 @@ const API_HASH = process.env.API_HASH;
 const SESSION_STRING = process.env.SESSION_STRING || "";
 
 const CHAT_FILE = path.join(__dirname, "chat.txt");
+const INPUT_FILE = path.join(__dirname, "input.json");
 const PORT = process.env.PORT || 3000;
 
 // ─── Health check server (for cron jobs) ───────────────────────────
@@ -128,6 +129,23 @@ function loadChatIds() {
   }
 }
 
+// ─── Load input.json groups ──────────────────────────────────────
+function loadInputGroups() {
+  try {
+    if (!fs.existsSync(INPUT_FILE)) {
+      log("📄 [Config]", "input.json not found — input group listener disabled.");
+      return {};
+    }
+    const content = fs.readFileSync(INPUT_FILE, "utf-8");
+    const groups = JSON.parse(content);
+    const count = Object.keys(groups).length;
+    log("📄 [Config]", `Loaded ${count} input group(s) from input.json`);
+    return groups;
+  } catch (err) {
+    logError("❌ [Config]", "Error loading input.json:", err.message);
+    return {};
+  }
+}
 
 // ─── Helper: check if current VN time is in quiet period ─────────
 function isQuietPeriod() {
@@ -139,9 +157,6 @@ function isQuietPeriod() {
   // VN day-of-week (0=Sun, 4=Thu)
   const vnOffset = 7 * 60 * 60 * 1000;
   const vnDay = new Date(now.getTime() + vnOffset).getUTCDay();
-
-  // Thu & Sun: quiet 16:12 - 16:25 (MN ends earlier)
-  if ((vnDay === 4 || vnDay === 0) && vnTime >= 16 * 60 + 12 && vnTime <= 16 * 60 + 25) return true;
 
   // Normal days: quiet 16:15 - 16:25
   if (vnTime >= 16 * 60 + 15 && vnTime <= 16 * 60 + 25) return true;
@@ -173,7 +188,7 @@ function isPureBet(text) {
   if (!/\d/.test(lower)) return false;
 
   // 2) Must contain at least one bet keyword OR amount pattern like 912x40
-  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|dao|dd|dđ|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
+  if (!/(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|b7lo|baylo|bao|keo|dao|dd|dđ|dat|dau|duoi|dui|dx|xc|xd|da|[234]d|[234](?:nn|mm|m[nrt])|đ(?:mnt|mn|mt|[aáàảãạ]|ài|[nt])|\dđ|\d\s*(?:đầu|đuôi|đuối|đuoi)|lo|\db|\bb\d|\bb\b|\d+x\d)/i.test(lower)) return false;
 
   // 3) Reject if contains Vietnamese conversation words
   if (/(^|\s)(anh|chi|chị|em|oi|ơi|nhe|nhé|nha|ghi|cho|toi|tôi|minh|mình|ban|bạn|duoc|được|khong|không|hom|hôm|gui|gửi|them|thêm|sua|sửa|xoa|xóa|huy|hủy|hello|hi|chao|chào|thanks|ok|roi|rồi|vay|vậy|di|đi)(\s|$)/i.test(lower)) return false;
@@ -305,6 +320,386 @@ function replaceSemicolonSpace(str) {
     }
   }
   return result;
+}
+
+// ─── Helper: format input group message for chat.txt bot ────────
+function formatInputMessage(text) {
+  var lines = text.split("\n");
+  var formattedLines = [];
+  var wasFormatted = false;
+  var errors = [];
+
+  for (var l = 0; l < lines.length; l++) {
+    var formatted = lines[l];
+    var prev;
+
+    // Rule: daoxcdui → xduoidao, daoxcdau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/daoxcdui/gi, "xduoidao");
+    formatted = formatted.replace(/daoxcdau/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: xcdaoduoi/xcdaodui → xduoidao, xcdaodau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/xcdaoduoi/gi, "xduoidao");
+    formatted = formatted.replace(/xcdaodui/gi, "xduoidao");
+    formatted = formatted.replace(/xcdaodau/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: xcduoidao → xduoidao, xcdaudao → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/xcduoidao/gi, "xduoidao");
+    formatted = formatted.replace(/xcdaudao/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: duoidao/duidao/daudao → xduoidao/xdaudao (\b prevents matching inside xduoidao/xdaudao)
+    prev = formatted;
+    formatted = formatted.replace(/\bduoidao/gi, "xduoidao");
+    formatted = formatted.replace(/\bduidao/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaudao/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: daodui/daoduoi → xduoidao, daodau → xdaudao
+    prev = formatted;
+    formatted = formatted.replace(/\bdaoduoi/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodui/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodau/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 'đa'/'đá'/etc → 'da' (normalize Vietnamese đ to ASCII d)
+    prev = formatted;
+    formatted = formatted.replace(/[đĐ][aáàảãạ]/g, "da");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 'đuoi'/'đuôi'/'đuối' → 'duoi' (normalize Vietnamese đ to ASCII d)
+    prev = formatted;
+    formatted = formatted.replace(/[đĐ]u[oôố][iíì]/gi, "duoi");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Replace '+' separator between digits with space
+    // e.g. "01+02+08 da1" → "01 02 08 da1"
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\+(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: For da patterns, convert '.' between 4+ digit groups to ';'
+    // e.g. "6771.7176.7179da2,5" → "6771;7176;7179da2,5"
+    // Also handles '.' already converted from ',' (e.g. "6771/7176/7179da2.5")
+    // Uses (?=.{4}(?=;)) to check position+4 is ';' — this prevents matching
+    // across semicolons that came from '/' (valid group separators).
+    if (/\d{4,}[\/.].*da/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\d{4,})[\.;](?=.{4}(?=;))/g, "$1;");
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: Replace ',' separator between multi-digit groups with '.'
+    // e.g. "9538,3756b1" → "9538.3756b1"
+    // BUT NOT "da0,5" (single digit before comma = decimal amount)
+    prev = formatted;
+    formatted = formatted.replace(/(\d{2,}),(\d{2,})/g, "$1.$2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: '/' → ';'
+    // Converts group separators like "95/04" → "95;04"
+    prev = formatted;
+    formatted = formatted.replace(/\//g, ";");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Replace '/' separator between digits with ' '
+    // e.g. "06/60/07da20" → "06 60 07da20"
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\/(\d)/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Normalize separators around 'da'
+    // e.g. "0110-da1" → "0110 da 1", "77da0'5" → "77 da 0'5", "-da " → " da "
+    prev = formatted;
+    formatted = formatted.replace(/(\d)\s*-\s*da\s*(\d)/gi, "$1 da $2");
+    formatted = formatted.replace(/(\d)\s*-\s*da\b/gi, "$1 da");
+    // General: separate digits directly adjacent to 'da' (no dash needed)
+    // e.g. "77da0'5" → "77 da 0'5", "3377da1" → "3377 da 1"
+    formatted = formatted.replace(/(\d)(da)([0-9,']+)/gi, "$1 da $3");
+    formatted = formatted.replace(/(\d)(da)\b/gi, "$1 da");
+    if (formatted !== prev) wasFormatted = true;
+
+
+
+    // Rule: 'dau duoi' → 'dd'
+    prev = formatted;
+    formatted = formatted.replace(/dau\s+duoi/gi, "dd");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Province abbreviations with dot/space (B.lieu→blieu, Bl→blieu, B.tre→btre)
+    prev = formatted;
+    formatted = formatted.replace(/\bB\.?\s*lieu\b/gi, "blieu");
+    formatted = formatted.replace(/^Bl\b/i, "blieu");
+    formatted = formatted.replace(/\bB\.?\s*tre\b/gi, "btre");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Normalize '.' separator between letters to space
+    // e.g. "k tum.k hoa" → "k tum k hoa" (dot used as visual separator, not decimal)
+    prev = formatted;
+    formatted = formatted.replace(/([a-zA-ZđĐ])\.([a-zA-ZđĐ])/g, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Province abbreviations
+    // 1) Specific common full-name provinces
+    prev = formatted;
+    formatted = formatted.replace(/\b(ha\s*noi|hanoi|hnoi)\b/gi, "hn");
+    formatted = formatted.replace(/\b(hai\s*phong|hphong)\b/gi, "hp");
+    formatted = formatted.replace(/\b(ho\s*chi\s*minh|hcm)\b/gi, "hcm");
+    formatted = formatted.replace(/\b(da\s*nang|dnang)\b/gi, "dnang");
+    formatted = formatted.replace(/\b(kon\s*tum|kontum)\b/gi, "kt");
+    formatted = formatted.replace(/\b(khanh\s*hoa|khanhhoa)\b/gi, "kh");
+    formatted = formatted.replace(/\b(ben\s*tre|b[.\s]*tre|b[.\s]*tr|btre|btr)\b/gi, "bt");
+    formatted = formatted.replace(/\b(vung\s*tau|vtau|v\s+tau)\b/gi, "vt");
+    formatted = formatted.replace(/\b(binh\s*duong|bduong)\b/gi, "bd");
+    formatted = formatted.replace(/\b(binh\s*dinh|bdinh)\b/gi, "bdi");
+    formatted = formatted.replace(/\b(binh\s*phuoc|bphuoc)\b/gi, "bp");
+    formatted = formatted.replace(/\b(binh\s*thuan|bthuan)\b/gi, "bth");
+    formatted = formatted.replace(/\b(quang\s*ngai|qngai)\b/gi, "qn");
+    formatted = formatted.replace(/\b(quang\s*nam|qnam|qna)\b/gi, "qn");
+    formatted = formatted.replace(/\b(quang\s*binh|qbinh)\b/gi, "qb");
+    formatted = formatted.replace(/\b(quang\s*tri|qtri)\b/gi, "qt");
+    formatted = formatted.replace(/\bt[.\s]*ph[ốo]\b/gi, "tp");
+    formatted = formatted.replace(/\b(dong\s*nai|d[.\s]+nai|dnai)\b/gi, "dn"); // resolved to dnang/dnai by time in processMessage
+    formatted = formatted.replace(/\b(da[ck]\s*n[oô]ng|d[.\s]+n[oô]ng|dn[oô]ng)\b/gi, "dno");
+    formatted = formatted.replace(/[đĐ][ắáăa][ck]\s*n[oô]ng/gi, "dno");
+    formatted = formatted.replace(/\b(soctrang|soc\s+trang|s[.\s]+trang|strang)\b/gi, "st");
+    formatted = formatted.replace(/\b(can\s*tho|can[.\s]+tho|c[.\s]+tho|ctho)\b/gi, "ct");
+    if (formatted !== prev) wasFormatted = true;
+
+    // 2) Đ/đ + dot/space + word → d + first letter (e.g. Đ nẵng→dn, đ.nẵng→dn)
+    prev = formatted;
+    formatted = formatted.replace(/[đĐ][.\s]\s?([a-zA-Z])\S*/g, function (match, p1) {
+      return ("d" + p1).toLowerCase();
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // 3) ASCII letter + dot + word → first two letters (e.g. h.noi→hn, t.pho→tp)
+    prev = formatted;
+    formatted = formatted.replace(/\b([a-zA-Z])\.\s?([a-zA-Z])\S*/gi, function (match, p1, p2) {
+      return (p1 + p2).toLowerCase();
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // 4) Single letter + space + word → first two letters (e.g. k tum→kt, k hoa→kh, h noi→hn)
+    prev = formatted;
+    formatted = formatted.replace(/\b([a-zA-Z])\s+([a-zA-Z])\S*/gi, function (match, p1, p2) {
+      // Only match if first part is a single letter (not a known keyword)
+      if (/^(b|dd|da|lo|xc)$/i.test(p1)) return match; // skip bet keywords
+      return (p1 + p2).toLowerCase();
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Remove invalid characters (;:.,@!#$%^&*) stuck to province names after parsing
+    // e.g. "hn; 37 b 4" → "hn 37 b 4", "kt: 50 da 1" → "kt 50 da 1"
+    // Also handles space before punctuation: "mb ;" → "mb", "mb ; " → "mb "
+    prev = formatted;
+    formatted = formatted.replace(/([a-zA-Z]{2,})[;:.,@!#$%^&*]+/g, "$1");
+    formatted = formatted.replace(/([a-zA-Z]{2,})\s+[;:.,@!#$%^&*]+/g, "$1");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Normalize đ/Đ → d in 2d/3d/4d bet-type suffixes
+    // Handles: 2đt→2dt, 3đmn→3dmn, 2 đt→2dt, đt→dt, đmn→dmn, etc.
+    prev = formatted;
+    formatted = formatted.replace(/([234])\s*[đĐ]/g, "$1d");
+    formatted = formatted.replace(/(^|[\s,;])[đĐ](mnt|mn|mt|[nt])/gm, "$1d$2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 2d/3d/4d suffix stripping (with or without space)
+    // Handles: 2dn, 2dt, 2dm, 2dr, 2dnn, 2dmm, 2dmn, 2dmt, 2dmnt, 2dmtr → 2d (same for 3d, 4d)
+    // Also: 2nn, 2mm, 3nn, 3mm → 2d, 3d; 2 dn, 2 dt, 3 dmn, 2 d → 2d, 3d
+    // Also strips trailing ; : chars (e.g. 2dmn; → 2d, 3dmt: → 3d, 2d; → 2d)
+    prev = formatted;
+    formatted = formatted.replace(/\b([234])\s+d(mnt|mtr|mn|mt|nn|mm|[mnrt])?\s*[;:]*/gi, "$1d");
+    formatted = formatted.replace(/\b2d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "2d");
+    formatted = formatted.replace(/\b3d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "3d");
+    formatted = formatted.replace(/\b4d\s*(mnt|mtr|mn|mt|nn|mm|[mnrt])\s*[;:]*/gi, "4d");
+    formatted = formatted.replace(/\b([234])(nn|mm|mtr|m[nrt])\s*[;:]*/gi, "$1d");
+    formatted = formatted.replace(/\b2m(tr|[nrt])\s*[;:]*/gi, "2d");
+    formatted = formatted.replace(/\b3m(tr|[nrt])\s*[;:]*/gi, "3d");
+    formatted = formatted.replace(/\b4m(tr|[nrt])\s*[;:]*/gi, "4d");
+    // Standalone 2d/3d/4d with trailing ; : (e.g. "2d;" → "2d")
+    formatted = formatted.replace(/\b([234]d)[;:]+/gi, "$1");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Insert space between 2d/3d/4d and immediately following digits
+    // e.g. "2d785" → "2d 785", "3d123" → "3d 123"
+    prev = formatted;
+    formatted = formatted.replace(/\b(2d|3d|4d)(\d)/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Separate digits from bet-type keywords (e.g. 785xdaodau100 → 785 xdaodau 100)
+    // Note: 'b\d+' is matched BEFORE standalone 'b' to keep e.g. 'b1', 'b50' as one token
+    prev = formatted;
+    // Loop to handle adjacent keyword sequences like b100dau100duoi200
+    var kwSepPrev;
+    do {
+      kwSepPrev = formatted;
+      formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b\d+|b)(\d)/gi, function (m, d1, kw, d2) {
+        // If kw already ends with digits (like b1, b50), don't add space after kw
+        if (/^b\d+$/i.test(kw)) return d1 + " " + kw + d2;
+        return d1 + " " + kw + " " + d2;
+      });
+    } while (formatted !== kwSepPrev);
+    formatted = formatted.replace(/(\d)(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b\d+|b)$/gi, "$1 $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Re-run dao normalization after digit-keyword separation
+    // When digits were attached (e.g. 10duoidao30 → 10 duoidao 30), \b now matches
+    prev = formatted;
+    formatted = formatted.replace(/\bxcdao\b/gi, "xc dao");
+    formatted = formatted.replace(/\bduoidao\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bduidao\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaudao\b/gi, "xdaudao");
+    formatted = formatted.replace(/\bdaoduoi\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodui\b/gi, "xduoidao");
+    formatted = formatted.replace(/\bdaodau\b/gi, "xdaudao");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: 3-digit number → prefix ALL dau/duoi/daodui/daodau keywords in the same entry with x
+    // e.g. "456 dau 30 duoi 10 daodui 10" → "456 xdau 30 xduoi 10 xduoidao 10"
+    // BUT NOT when 3-digit number is an amount after a bet keyword (e.g. "dd 150 dau 200" stays as-is)
+    // Handles: "hn 191 duoi 20", "hn191duoi20", "191 duoi 20"
+    prev = formatted;
+    formatted = formatted.replace(/(?:^|(\S+)\s+|([a-zA-Z]+))(\d{3})(?!\d)((?:\s*(?:daodui|daodau|daoduoi|duoi|dui|dau)\s*[\d,.]*)+)/gi, function (m, precedingSpaced, precedingAttached, digits, rest) {
+      var preceding = precedingSpaced || precedingAttached || null;
+      // If preceded by a bet keyword, this 3-digit number is an amount — don't convert
+      if (preceding && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|baylo|lo|b\d+|b)$/i.test(preceding)) return m;
+      var converted = rest.replace(/\b(daodui|daodau|daoduoi|duoi|dui|dau)(?=\d|\s|$)/gi, function (kw) {
+        var t = kw.toLowerCase();
+        if (t === "daodui" || t === "daoduoi") return "xduoidao";
+        if (t === "daodau") return "xdaudao";
+        if (t === "duoi" || t === "dui") return "xduoi";
+        if (t === "dau") return "xdau";
+        return kw;
+      });
+      // Insert space between keyword and attached digits (e.g. "xduoi20" → "xduoi 20")
+      converted = converted.replace(/(xduoidao|xdaudao|xduoi|xdau)(\d)/gi, "$1 $2");
+      return (preceding ? preceding + ' ' : '') + digits + ' ' + converted.trim();
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Split 4+ consecutive digits with 'da' suffix
+    // e.g. "8998da0,5" → "89 98 da 0,5"
+    prev = formatted;
+    formatted = formatted.replace(/(\d{4,})(da)([\d,]+)/gi, function (match, digits, da, value) {
+      if (digits.length % 2 !== 0) {
+        errors.push("Odd digit count in \"" + match + "\"");
+        return match;
+      }
+      var pairs = [];
+      for (var i = 0; i < digits.length; i += 2) {
+        pairs.push(digits.substr(i, 2));
+      }
+      return pairs.join(" ") + " da " + value;
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Split 4+ consecutive digits before any bet keyword (b, dd, lo, b7lo, xc, da, etc.)
+    // e.g. "008899 b 100" → "00 88 99 b 100"
+    prev = formatted;
+    formatted = formatted.replace(/(?:(?:^|(?<=\s))(\S+)\s+)?(?<!\.)(?<!\d )(\d{4,})\s+(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b)\b/gi, function (match, prevWord, digits, kw) {
+      // If preceding word is a bet keyword, these digits are an amount — don't split
+      if (prevWord && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b\d*|b)$/i.test(prevWord)) return match;
+      // If keyword is 'b' and digits are exactly 4 and line has no 'da' → don't split
+      if (/^(b|lo)$/i.test(kw) && digits.length === 4 && !/\bda\b/i.test(formatted)) return match;
+      if (digits.length % 2 !== 0) {
+        errors.push("Odd digit count in \"" + match + "\"");
+        return match;
+      }
+      var pairs = [];
+      for (var i = 0; i < digits.length; i += 2) {
+        pairs.push(digits.substr(i, 2));
+      }
+      var result = (prevWord ? prevWord + " " : "") + pairs.join(" ") + " " + kw;
+      return result;
+    });
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Re-run da separation after digit splitting
+    // When "326973 da3" is split to "32 69 73 da3", the "da3" still needs separating
+    // Case 1: digit directly before da (e.g. "73da3" → "73 da 3")
+    // Case 2: space before da, digits after (e.g. " da3" → " da 3")
+    prev = formatted;
+    formatted = formatted.replace(/(\d)(da)([0-9,']+)/gi, "$1 da $3");
+    formatted = formatted.replace(/(\d)(da)\b/gi, "$1 da");
+    formatted = formatted.replace(/\b(da)([0-9,']+)/gi, "da $2");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Split remaining 4+ consecutive digits into pairs (ONLY when line contains 'da')
+    // e.g. "5191 da 10" → "51 91 da 10", but "5191 b 10" stays as-is
+    if (/\bda\b/i.test(formatted)) {
+      // Sub-rule: Normalize '.' separator between 4+ digit sequences to ';' (da lines only)
+      // e.g. "8886.9092.3232 da 2" → "8886;9092;3232 da 2" → then split into pairs
+      // BUT "12.34" (2-digit pairs) stays as-is
+      prev = formatted;
+      formatted = formatted.replace(/(\d{4,})\.(?=\d{4,})/g, "$1;");
+      if (formatted !== prev) wasFormatted = true;
+      prev = formatted;
+      formatted = formatted.replace(/\d{4,}/g, function (match) {
+        if (match.length % 2 !== 0) {
+          errors.push("Odd digit count: \"" + match + "\"");
+          return match;
+        }
+        var pairs = [];
+        for (var i = 0; i < match.length; i += 2) {
+          pairs.push(match.substr(i, 2));
+        }
+        return pairs.join(" ");
+      });
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: When line contains 'da', convert '05' or "0'5" to '0,5' ONLY after 'da'
+    // e.g. "89 98 da 05" → "89 98 da 0,5", "89 98 da 0'5" → "89 98 da 0,5"
+    // BUT "05 da 10" → "05" stays untouched (before da)
+    if (/\bda\b/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\bda\b.*?)(?<!\d)0'5(?!\d)/gi, "$10,5");
+      formatted = formatted.replace(/(\bda\b.*?)(?<!\d)05(?!\d)/gi, "$10,5");
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: In da lines, convert comma to dot in amount after 'da'
+    // e.g. "da 2,5" → "da 2.5", "da 0,5" → "da 0.5"
+    if (/\bda\b/i.test(formatted)) {
+      prev = formatted;
+      formatted = formatted.replace(/(\bda\s+\d+),(\d+)/gi, "$1.$2");
+      if (formatted !== prev) wasFormatted = true;
+    }
+
+    // Rule: '/' → ' '
+    prev = formatted;
+    formatted = formatted.replace(/\//g, " ");
+    if (formatted !== prev) wasFormatted = true;
+
+    // Rule: Strip 'x' prefix from xduoi/xdui/xdau when ALL number tokens are 2-digit
+    // The 'x' prefix (xiên) is only valid for 3-digit numbers.
+    // e.g. "11 00 xduoi 300" → "11 00 duoi 300" (2-digit numbers → strip x)
+    // but  "786 xduoi 300" stays as-is (3-digit number → keep x)
+    // Compound keywords like xduoidao/xdaudao are NOT affected.
+    (function () {
+      var numberTokens = formatted.match(/\b\d{2,3}\b/g);
+      if (numberTokens && numberTokens.length > 0) {
+        var hasThreeDigit = numberTokens.some(function (t) { return t.length === 3; });
+        if (!hasThreeDigit) {
+          prev = formatted;
+          // Strip x from xduoi/xdui/xdau but NOT from xduoidao/xdaudao/xdaodau/xdaodui/xdaoduoi
+          formatted = formatted.replace(/\bxduoi\b/gi, "duoi");
+          formatted = formatted.replace(/\bxdui\b/gi, "dui");
+          formatted = formatted.replace(/\bxdau\b/gi, "dau");
+          if (formatted !== prev) wasFormatted = true;
+        }
+      }
+    })();
+
+    formattedLines.push(formatted);
+  }
+
+  return { formatted: formattedLines.join("\n"), wasFormatted: wasFormatted, errors: errors };
 }
 
 // ─── Helper: classify line for custom sort order ────────────────
@@ -709,7 +1104,312 @@ async function startUserbot() {
 
   log("👁️  [Userbot]", `Monitoring for messages from bot ${TARGET_BOT_ID}`);
 
+  // ─── Input Group Listener (standalone) ────────────────────────────
+  const inputGroups = loadInputGroups();
+  const inputGroupIds = []; // normalized IDs from input.json
+  const messageCounters = {}; // per-group counters
 
+  for (const name in inputGroups) {
+    const id = inputGroups[name].ID;
+    if (id) {
+      inputGroupIds.push(id.toString());
+      messageCounters[id.toString()] = 0;
+      const label = inputGroups[name].name || name;
+      log("👁️  [InputListener]", `Monitoring input group "${label}" (ID: ${id})`);
+    }
+  }
+
+  // Get the userbot's own ID
+  const me = await client.getMe();
+  const userbotSelfId = me.id.toString();
+  log("👁️  [Userbot]", `Userbot self ID: ${userbotSelfId}`);
+
+  if (inputGroupIds.length > 0) {
+    // Get bot's own ID to ignore its replies (prevent loops)
+    const botInfo = await bot.telegram.getMe();
+    const botSelfId = botInfo.id;
+    log("👁️  [InputListener]", `Bot self ID: ${botSelfId} — will ignore own messages`);
+
+    // Resolve only the specific groups we need (no bulk dialog fetch)
+    const { Api } = require("telegram/tl");
+
+    // Helper: resolve a Telegram entity from a raw ID string (handles channels, groups, users/bots)
+    async function resolveEntity(rawId) {
+      const idStr = rawId.toString();
+      if (idStr.startsWith("-100")) {
+        // Supergroup / Channel
+        const channelId = BigInt(idStr.slice(4)); // remove "-100"
+        return await client.getEntity(new Api.PeerChannel({ channelId }));
+      } else if (idStr.startsWith("-")) {
+        // Legacy group chat (negative, no -100 prefix)
+        const chatId = BigInt(idStr.slice(1)); // remove "-"
+        return await client.getEntity(new Api.PeerChat({ chatId }));
+      } else {
+        // User / Bot (positive ID)
+        const userId = BigInt(idStr);
+        return await client.getEntity(new Api.PeerUser({ userId }));
+      }
+    }
+
+    // Pre-resolve input.json group entities (for fromPeer when forwarding)
+    const resolvedInputGroups = {};
+    for (let i = 0; i < inputGroupIds.length; i++) {
+      try {
+        const entity = await resolveEntity(inputGroupIds[i]);
+        resolvedInputGroups[inputGroupIds[i]] = entity;
+        log("✅ [InputListener]", `Resolved input group entity: ${inputGroupIds[i]}`);
+      } catch (e) {
+        logError("❌ [InputListener]", `Failed to resolve input group ${inputGroupIds[i]}:`, e.message);
+      }
+    }
+
+    // Pre-resolve chat.txt entities (for target when forwarding)
+    const resolvedTargetChats = {};
+    const chatIds = loadChatIds();
+    for (let t = 0; t < chatIds.length; t++) {
+      try {
+        const entity = await resolveEntity(chatIds[t]);
+        resolvedTargetChats[chatIds[t]] = entity;
+        log("✅ [InputListener]", `Resolved chat.txt entity: ${chatIds[t]}`);
+      } catch (e) {
+        logError("❌ [InputListener]", `Failed to resolve chat ${chatIds[t]}:`, e.message);
+      }
+    }
+
+    // === Forward Queue — process messages one at a time ===
+    const forwardQueue = [];
+    let isProcessingQueue = false;
+
+    async function processForwardQueue() {
+      if (isProcessingQueue) return;
+      isProcessingQueue = true;
+      while (forwardQueue.length > 0) {
+        const task = forwardQueue.shift();
+        try {
+          await task();
+        } catch (e) {
+          logError("❌ [Queue]", "Error processing queued task:", e.message);
+        }
+      }
+      isProcessingQueue = false;
+    }
+
+    client.addEventHandler(async (event) => {
+      try {
+        const message = event.message;
+        if (!message || !message.text) return;
+
+        const chatId = (message.chatId || message.peerId).toString();
+        const senderId = message.senderId?.toString();
+
+        // Ignore messages from the bot itself (counter replies)
+        if (senderId === botSelfId.toString()) return;
+
+        // Ignore outgoing messages from userbot itself (except in no-ignore groups)
+        const NO_IGNORE_USERBOT_GROUPS = ["-1003724203074"];
+        if (message.out || senderId === userbotSelfId) {
+          let skipIgnore = false;
+          for (let i = 0; i < NO_IGNORE_USERBOT_GROUPS.length; i++) {
+            const gid = NO_IGNORE_USERBOT_GROUPS[i];
+            if (chatId === gid || "-100" + chatId === gid || chatId === gid.replace(/^-100/, "")) {
+              skipIgnore = true;
+              break;
+            }
+          }
+          if (!skipIgnore) return;
+        }
+
+        // Check if this message is from an input.json group
+        let matchedGroupId = null;
+        for (let i = 0; i < inputGroupIds.length; i++) {
+          const gid = inputGroupIds[i];
+          // input.json has "-100xxxx", GramJS might give "xxxx" without -100
+          if (chatId === gid || "-100" + chatId === gid || chatId === gid.replace(/^-100/, "")) {
+            matchedGroupId = gid;
+            break;
+          }
+        }
+
+        if (!matchedGroupId) return;
+
+        // Check quiet period (skip for exempt groups)
+        const QUIET_EXEMPT_GROUPS = ["-1003724203074"]; // test
+        const isExempt = QUIET_EXEMPT_GROUPS.some(g => matchedGroupId === g || matchedGroupId === g.replace(/^-100/, ""));
+        if (isQuietPeriod() && !isExempt) {
+          log("🔇 [InputListener]", `Quiet period — skipping message in group ${matchedGroupId}`);
+          try {
+            await client.sendMessage(chatId, {
+              message: "Đã hết giờ nhận số tin không OK không chịu trách nhiệm",
+              replyTo: message.id,
+            });
+          } catch (e) {
+            logError("❌ [InputListener]", `Failed to send quiet period reply: ${e && e.message ? e.message : e}`);
+          }
+          return;
+        }
+
+        // Check if message is valid (not just dots)
+        if (!isValidInputMessage(message.text)) {
+          log("⏭️  [InputListener]", `Invalid message (dots only) in group ${matchedGroupId} — skipped`);
+          return;
+        }
+
+        // Increment counter
+        messageCounters[matchedGroupId]++;
+        const counter = messageCounters[matchedGroupId];
+
+        // Resolve sender name (first + last)
+        let senderName = "unknown";
+        if (message.senderId) {
+          try {
+            // Try getSender() first (uses message context, works even for unseen users)
+            let senderEntity = await message.getSender();
+            if (!senderEntity) {
+              senderEntity = await client.getEntity(message.senderId);
+            }
+            const first = senderEntity.firstName || "";
+            const last = senderEntity.lastName || "";
+            senderName = (first + " " + last).trim() || "unknown";
+          } catch (e) {
+            logError("⚠️  [InputListener]", `Could not resolve sender ${senderId}: ${e.message}`);
+          }
+        }
+
+        // Get group name from input.json
+        let groupName = matchedGroupId;
+        for (const key in inputGroups) {
+          if (inputGroups[key].ID === matchedGroupId) {
+            groupName = inputGroups[key].name || matchedGroupId;
+            break;
+          }
+        }
+
+        log("📩 [InputListener]", `Valid message #${counter} from ${senderName} in "${groupName}" (${matchedGroupId}) | preview: ${preview(message.text)}`);
+
+        const botChatId = Number(matchedGroupId);
+
+        // Format the message for chat.txt bot
+        const { formatted, wasFormatted, errors } = formatInputMessage(message.text);
+
+        // Only reply with counter if message is a pure bet (no conversation mixed in)
+        if (!isPureBet(message.text)) {
+          log("⏭️  [InputListener]", `Message #${counter} in "${groupName}" is not a pure bet — skipping reply & forward | original: ${preview(message.text)} | formatted: ${preview(formatted)}`);
+          messageCounters[matchedGroupId]--; // revert counter since it's not a valid bet
+          return;
+        }
+
+        // Bot replies with counter to the original message in the same input group
+        try {
+          await bot.telegram.sendMessage(botChatId, `${counter}`);
+          log("📤 [InputListener]", `Bot replied "${counter}" to msg ${message.id} in group ${matchedGroupId}`);
+        } catch (e) {
+          logError("❌ [InputListener]", `Failed to reply counter in group ${matchedGroupId}:`, e.message);
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + matchedGroupId + ": " + e.message); } catch (_) { }
+        }
+
+        // Log format errors to error chat
+        if (errors.length > 0) {
+          try {
+            const errorMsg = "⚠️ Format errors in \"" + groupName + "\" from " + senderName + ":\n" +
+              errors.map(function (e) { return "• " + e; }).join("\n") +
+              "\n\nOriginal:\n" + message.text;
+            await bot.telegram.sendMessage(ERROR_CHAT_ID, errorMsg);
+            logError("⚠️  [InputListener]", `Format errors sent to error chat: ${errors.join(", ")}`);
+          } catch (e) {
+            logError("❌ [InputListener]", `Failed to send error to ${ERROR_CHAT_ID}: ${e.message}`);
+          }
+        }
+
+        // Resolve entities for send/forward
+        const fromEntity = resolvedInputGroups[matchedGroupId];
+        if (!fromEntity) {
+          logError("❌ [InputListener]", `No resolved entity for source group ${matchedGroupId} — cannot forward/send`);
+          try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ No resolved entity for group " + matchedGroupId + " — cannot forward/send"); } catch (_) { }
+          return;
+        }
+
+        const msgId = message.id;
+
+        // Decide: forward directly if no reformatting needed, else send formatted text
+        const fullMessage = formatted;
+
+        forwardQueue.push(async () => {
+          if (wasFormatted) {
+            // Message was reformatted → send the formatted text + extra info message
+            log("📬 [Queue]", `Processing formatted send for message #${counter} (queue size: ${forwardQueue.length})`);
+            const infoMessage = senderName + " - " + groupName;
+            const chatKeys = Object.keys(resolvedTargetChats);
+            for (let ci = 0; ci < chatKeys.length; ci++) {
+              const chatKey = chatKeys[ci];
+              try {
+                await client.sendMessage(resolvedTargetChats[chatKey], { message: fullMessage });
+                log("📤 [InputListener]", `Userbot sent formatted message #${counter} to chat ${chatKey}`);
+                // Send extra message with sender name + group name
+                await client.sendMessage(resolvedTargetChats[chatKey], { message: infoMessage });
+                log("📤 [InputListener]", `Userbot sent info "${infoMessage}" to chat ${chatKey}`);
+              } catch (e) {
+                logError("❌ [InputListener]", `Failed to send to chat ${chatKey}: ${e.message}`);
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
+              }
+              if (ci < chatKeys.length - 1) {
+                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
+                await new Promise((r) => setTimeout(r, delay));
+              }
+            }
+          } else {
+            // Message doesn't need reformatting → forward directly
+            log("📬 [Queue]", `Processing direct forward for message #${counter} (queue size: ${forwardQueue.length})`);
+            const chatKeys = Object.keys(resolvedTargetChats);
+            for (let ci = 0; ci < chatKeys.length; ci++) {
+              const chatKey = chatKeys[ci];
+              try {
+                await client.forwardMessages(resolvedTargetChats[chatKey], {
+                  messages: [msgId],
+                  fromPeer: fromEntity,
+                });
+                log("📤 [InputListener]", `Userbot forwarded original message #${counter} to chat ${chatKey}`);
+              } catch (e) {
+                logError("❌ [InputListener]", `Failed to forward to chat ${chatKey}: ${e.message}`);
+                try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
+              }
+              if (ci < chatKeys.length - 1) {
+                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
+                await new Promise((r) => setTimeout(r, delay));
+              }
+            }
+          }
+        });
+
+        processForwardQueue();
+      } catch (err) {
+        logError("❌ [InputListener]", "Error handling input group message:", err.message, err.stack);
+        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ InputListener crash: " + err.message + "\n" + err.stack); } catch (_) { }
+      }
+    }, new NewMessage({}));
+
+    log("👁️  [InputListener]", `Listening to ${inputGroupIds.length} input group(s)`);
+
+    // Reset counters at midnight, 16:35, and 17:35 VN time
+    let lastResetKey = "";
+    setInterval(() => {
+      const now = new Date();
+      const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+      const vnHour = vnTime.getUTCHours();
+      const vnMinute = vnTime.getUTCMinutes();
+      const resetKey = vnTime.getUTCFullYear() + "-" + vnTime.getUTCMonth() + "-" + vnTime.getUTCDate() + "_" + vnHour + ":" + vnMinute;
+      if ((vnHour === 0 && vnMinute === 0) || (vnHour === 16 && vnMinute === 35) || (vnHour === 17 && vnMinute === 35)) {
+        if (lastResetKey !== resetKey) {
+          lastResetKey = resetKey;
+          for (const gid in messageCounters) {
+            messageCounters[gid] = 0;
+          }
+          log("🔄 [InputListener]", `Counters reset at ${vnHour}:${vnMinute} VN time`);
+        }
+      }
+    }, 30000); // check every 30s
+  }
 
   // Keep-alive: ping Telegram periodically to prevent TIMEOUT
   setInterval(async () => {
