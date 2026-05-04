@@ -605,7 +605,7 @@ function formatInputMessage(text) {
       // If preceding word is a bet keyword, these digits are an amount — don't split
       if (prevWord && /^(xduoidao|xdaudao|xdaodau|xdaodui|xdaoduoi|xcdaodui|xcdaodau|xcduoidao|xcdaudao|daoxcdui|daoxcdau|xcdao|xcduoi|xcdui|xcdau|duoidao|duidao|daudao|xdau|xduoi|xdui|daodui|daodau|daoduoi|dd|dau|duoi|dui|xc|da|bao|keo|b7lo|lo|b\d*|b)$/i.test(prevWord)) return match;
       // If keyword is 'b' and digits are exactly 4 and line has no 'da' → don't split
-      if (/^b$/i.test(kw) && digits.length === 4 && !/\bda\b/i.test(formatted)) return match;
+      if (/^(b|lo)$/i.test(kw) && digits.length === 4 && !/\bda\b/i.test(formatted)) return match;
       if (digits.length % 2 !== 0) {
         errors.push("Odd digit count in \"" + match + "\"");
         return match;
