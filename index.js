@@ -778,9 +778,8 @@ function processMessage(text) {
     }
   }
 
-  // Step 4: For each instance, split by ' ' → first item is key, rest are values
-  const grouped = {};
-  const keyOrder = []; // Track insertion order (Object.keys reorders numeric keys!)
+  // Step 4: For each segment, transform key+values and output in original order (no grouping)
+  const outputLines = [];
 
   for (let s = 0; s < segments.length; s++) {
     const segment = segments[s].trim();
@@ -828,57 +827,19 @@ function processMessage(text) {
     // Apply time-based suffix to 2d/3d/4d keys
     const finalKey = applyKeySuffix(transformedKey);
 
-    // Accumulate into grouped object: { key: [[val1, val2], [val3, val4], ...] }
-    if (!grouped[finalKey]) {
-      grouped[finalKey] = [];
-      keyOrder.push(finalKey); // Only push on first occurrence to preserve original order
-    }
+    // Build line directly in original order (no grouping by key)
     if (transformedValues.length > 0) {
-      grouped[finalKey].push(transformedValues);
+      outputLines.push(finalKey + " " + transformedValues.join(" "));
     }
   }
 
-  // Step 5: Use keyOrder to preserve original insertion order
-  const sortedKeys = keyOrder;
+  if (outputLines.length === 0) return null;
 
-  if (sortedKeys.length === 0) return null;
+  // Step 5: Join lines and apply final transformations
+  let result = outputLines.join("\n");
 
-  // Step 6+7: Build result — each sub-array becomes its own line: "key val1 val2"
-  let result = "";
-  for (let k = 0; k < sortedKeys.length; k++) {
-    const key = sortedKeys[k];
-    const subArrays = grouped[key];
-    for (let s = 0; s < subArrays.length; s++) {
-      let line = key;
-      for (let v = 0; v < subArrays[s].length; v++) {
-        line += " " + subArrays[s][v];
-      }
-      if (result.length > 0) {
-        result += "\n";
-      }
-      result += line;
-    }
-  }
-
-  // Step 8: Replace '; ' with '/'
+  // Replace '; ' with '/'
   result = replaceSemicolonSpace(result);
-
-  // Step 9: Split result by newline
-  const lines = result.split("\n");
-
-  // Step 10: Split each line by space → nested array
-  const nested = [];
-  for (let li = 0; li < lines.length; li++) {
-    const trimmed = lines[li].trim();
-    if (!trimmed) continue;
-    const lineParts = trimmed.split(" ").filter(function (p) { return p !== ""; });
-    if (lineParts.length > 0) {
-      nested.push(lineParts);
-    }
-  }
-
-  // Step 11: Return lines in original order (sorting disabled)
-  result = nested.map(function (lineArr) { return lineArr.join(" "); }).join("\n");
 
   return result;
 }
