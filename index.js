@@ -702,62 +702,6 @@ function formatInputMessage(text) {
   return { formatted: formattedLines.join("\n"), wasFormatted: wasFormatted, errors: errors };
 }
 
-// ─── Helper: classify line for custom sort order ────────────────
-function getLineGroup(lineArr) {
-  if (!lineArr || lineArr.length === 0) return 99;
-
-  var hasB = false;
-  var hasDd = false;
-  var hasDuoi = false;
-  var hasXc = false;
-  var hasDau = false;
-  var hasXcDau = false;
-  var hasXcDuoi = false;
-  var hasXdaudao = false;
-  var hasXdaoDuoi = false;
-
-  for (var i = 0; i < lineArr.length; i++) {
-    var el = lineArr[i].toLowerCase();
-    if (el === "b") hasB = true;
-    if (el === "dd") hasDd = true;
-    if (el === "duoi" || el === "dui") hasDuoi = true;
-    if (el === "xc") hasXc = true;
-    if (el === "dau") hasDau = true;
-    if (el === "xcdau" || el === "xdau") hasXcDau = true;
-    if (el === "xcduoi" || el === "xcdui") hasXcDuoi = true;
-    if (el === "xdaudao") hasXdaudao = true;
-    if (el === "xduoidao" || el === "xdaodui" || el === "xdaoduoi") hasXdaoDuoi = true;
-  }
-
-  // Group 1: contains 'b'
-  if (hasB) return 1;
-
-  // Group 2: contains 'dd'
-  if (hasDd) return 2;
-
-  // Group 3: contains 'dau' (standalone, no xc)
-  if (hasDau && !hasXc) return 3;
-
-  // Group 4: contains 'duoi'/'dui' but NOT 'xc'
-  if (hasDuoi && !hasXc) return 4;
-
-  // Group 5: xcdau / xdau / xdaudao / xc + dau
-  if (hasXcDau) return 5;
-  if (hasXdaudao) return 5;
-  if (hasXc && hasDau) return 5;
-
-  // Group 6: xcduoi / xcdui / xduoidao / xc + duoi / xc + dui
-  if (hasXcDuoi) return 6;
-  if (hasXdaoDuoi) return 6;
-  if (hasXc && hasDuoi) return 6;
-
-  // Group 7: only 'xc' (no duoi/dui/dau)
-  if (hasXc) return 7;
-
-  // Everything else
-  return 99;
-}
-
 // ─── Helper: process message ─────────────────────────────────────
 function processMessage(text) {
   // Replace 'baylo' → 'b7lo' BEFORE any parsing (so 'lo' in 'baylo' isn't parsed as bet keyword)
