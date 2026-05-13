@@ -780,8 +780,8 @@ function processMessage(text) {
   content = removeBackticks(content).trim();
   if (!content) return null;
 
-  // Step 3: Disable comma splitting - split by newlines only
-  const rawSegments = content.split(/\n|\r/).filter(s => s.trim());
+  // Step 3: Split by newlines and commas (commas are entry separators, not preserved)
+  const rawSegments = content.split(/\n|\r|,/).filter(s => s.trim());
 
   // Step 3b: Further split segments at 'n' boundaries (not 'tn')
   // e.g. "11 dd 360n 49 67 79 dd 10n" → ["11 dd 360n", "49 67 79 dd 10n"]
