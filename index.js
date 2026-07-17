@@ -1084,16 +1084,45 @@ async function startUserbot() {
     // === Forward Queue — process messages one at a time ===
     const forwardQueue = [];
     let isProcessingQueue = false;
+    let consecutiveErrors = 0;
+    const BASE_DELAY_MS = 3000;
+
+    // Exponential backoff state
+    let currentBackoffMs = BASE_DELAY_MS;
+    const MAX_BACKOFF_MS = 60000; // max 60 seconds
 
     async function processForwardQueue() {
       if (isProcessingQueue) return;
       isProcessingQueue = true;
+
       while (forwardQueue.length > 0) {
         const task = forwardQueue.shift();
         try {
           await task();
+          // Reset backoff on success
+          consecutiveErrors = 0;
+          currentBackoffMs = BASE_DELAY_MS;
         } catch (e) {
-          logError("❌ [Queue]", "Error processing queued task:", e.message);
+          // Check for flood wait error
+          const floodMatch = e.message && e.message.match(/Flood wait is required: (\d+) seconds/i);
+          if (floodMatch) {
+            const waitSeconds = parseInt(floodMatch[1], 10);
+            const waitMs = waitSeconds * 1000;
+            consecutiveErrors++;
+            logError("⚠️  [Queue]", `Flood wait detected: ${waitSeconds}s | consecutive errors: ${consecutiveErrors} | applying backoff: ${currentBackoffMs}ms`);
+            await new Promise((r) => setTimeout(r, waitMs));
+            // Push task back to queue to retry
+            forwardQueue.unshift(task);
+          } else {
+            logError("❌ [Queue]", "Error processing queued task:", e.message);
+            consecutiveErrors++;
+          }
+
+          // Exponential backoff: double delay on each consecutive error, cap at MAX_BACKOFF_MS
+          if (consecutiveErrors > 0) {
+            currentBackoffMs = Math.min(currentBackoffMs * 2, MAX_BACKOFF_MS);
+            log("⏳ [Queue]", `Exponential backoff active: next delay = ${currentBackoffMs}ms`);
+          }
         }
       }
       isProcessingQueue = false;
@@ -1257,7 +1286,7 @@ async function startUserbot() {
                 try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to send formatted msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
               }
               if (ci < chatKeys.length - 1) {
-                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                const delay = Math.floor(Math.random() * 1000) + currentBackoffMs;
                 log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
                 await new Promise((r) => setTimeout(r, delay));
               }
@@ -1279,7 +1308,7 @@ async function startUserbot() {
                 try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + chatKey + ": " + e.message); } catch (_) { }
               }
               if (ci < chatKeys.length - 1) {
-                const delay = Math.floor(Math.random() * 3 + 3) * 1000;
+                const delay = Math.floor(Math.random() * 1000) + currentBackoffMs;
                 log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
                 await new Promise((r) => setTimeout(r, delay));
               }
