@@ -5,6 +5,7 @@ const INPUT_FILE = path.join(__dirname, "finput.txt");
 const OUTPUT_FILE = path.join(__dirname, "foutput.txt");
 
 function loadLines(file) {
+  if (!fs.existsSync(file)) return [];
   return fs.readFileSync(file, "utf8")
     .split(/\r?\n/)
     .map((line) => line.trim());
@@ -27,6 +28,9 @@ function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSou
     if (message?.text && sourceId && senderId && senderId !== ctx.botInfo?.id) {
       try {
         const inputLines = loadLines(INPUT_FILE);
+        const outputLines = loadLines(OUTPUT_FILE);
+        const hasIds = (lines) => lines.some((id) => /^-?\d+$/.test(id));
+        if (!hasIds(inputLines) || !hasIds(outputLines)) return next();
         const sourceLine = inputLines.findIndex((id) =>
           id && !id.startsWith("#") && matchesSourceId(id, sourceId, ctx.chat?.type));
         if (sourceLine !== -1) {
@@ -37,7 +41,7 @@ function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSou
           }
 
           if (!excludedUserIds.includes(senderId)) {
-            const targetId = loadLines(OUTPUT_FILE)[sourceLine];
+            const targetId = outputLines[sourceLine];
             if (!targetId || !/^-?\d+$/.test(targetId) ||
                 matchesSourceId(targetId, sourceId, ctx.chat?.type)) {
               log("⏭️  [Forwarder]", `No valid foutput.txt line ${sourceLine + 1} for finput.txt line ${sourceLine + 1}; skipped msg ${message.message_id} from ${sourceId}`);
