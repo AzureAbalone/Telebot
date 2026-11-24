@@ -949,9 +949,7 @@ async function startUserbot() {
     onError: (err) => logError("❌ [Userbot]", "Login error:", err),
   });
 
-  const savedSession = client.session.save();
   log("✅ [Userbot]", "Logged in successfully!");
-  log("🔑 [Userbot]", `SESSION_STRING=${savedSession}`);
 
   // Store client reference globally for crash notification system
   _userbotClient = client;

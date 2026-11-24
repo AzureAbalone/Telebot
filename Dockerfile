@@ -14,6 +14,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # 3. Application code: changes most often → last layers
 COPY index.js forwarder.js input.json ./
 COPY output.txt finput.txt foutput.txt ./
+RUN mkdir -p /app/state
 
 # 4. Ensure non-root ownership
 RUN chown -R telebot:telebot /app
