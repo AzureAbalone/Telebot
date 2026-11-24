@@ -1,3 +1,5 @@
 node_modules/
 .env
 .brain/
+/finput-counts.json
+/finput-counts.json.*.tmp

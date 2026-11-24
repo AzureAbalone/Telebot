@@ -12,8 +12,11 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # 3. Application code: changes most often → last layers
-COPY index.js input.json ./
-COPY chat.txt ./
+COPY index.js forwarder.js input.json ./
+COPY output.txt finput.txt foutput.txt ./
+RUN mkdir -p /app/state && \
+    printf '{"date":"","counts":{}}\n' > /app/state/finput-counts.json && \
+    ln -s /app/state/finput-counts.json /app/finput-counts.json
 
 # 4. Ensure non-root ownership
 RUN chown -R telebot:telebot /app
