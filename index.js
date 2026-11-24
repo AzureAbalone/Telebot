@@ -1,8 +1,13 @@
 require("dotenv").config();
 const { Telegraf } = require("telegraf");
+const { TelegramClient } = require("telegram");
+const { StringSession } = require("telegram/sessions");
+const { NewMessage } = require("telegram/events");
+const input = require("input");
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const { createForwardMiddleware } = require("./forwarder");
 
 const pino = require("pino");
 
@@ -61,12 +66,17 @@ function preview(text, maxLen) {
 // ─── Config ───────────────────────────────────────────────────────
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+const TARGET_BOT_ID = 6218688053;
 const ERROR_CHAT_ID = 5064866550;
 const HEADER_PATTERN = "📌 Tin vượt chuẩn trả lại những số sau:";
 const ALLOWED_FORWARD_FROM = (process.env.ALLOWED_FORWARD_FROM || "")
   .split(",")
   .map((id) => parseInt(id.trim(), 10))
   .filter((id) => !isNaN(id));
+
+const API_ID = parseInt(process.env.API_ID);
+const API_HASH = process.env.API_HASH;
+const SESSION_STRING = process.env.SESSION_STRING || "";
 
 const CHAT_FILE = path.join(__dirname, "output.txt");
 const INPUT_FILE = path.join(__dirname, "input.json");
@@ -99,7 +109,7 @@ server.listen(PORT, () => {
   log("🌐 [Health]", `Server listening on port ${PORT}`);
 });
 
-// ─── Load chat IDs from output.txt ──────────────────────────────────
+// ─── Load chat IDs from output.txt ────────────────────────────────
 function loadChatIds() {
   try {
     if (!fs.existsSync(CHAT_FILE)) {
@@ -313,7 +323,7 @@ function replaceSemicolonSpace(str) {
   return result;
 }
 
-// ─── Helper: format input group message for output.txt bot ────────
+// ─── Helper: format input group message for output.txt bot ───────
 function formatInputMessage(text) {
   var lines = text.split("\n");
   var formattedLines = [];
@@ -836,112 +846,194 @@ function processMessage(text) {
 }
 
 // ─── Telegraf Bot Commands ────────────────────────────────────────
+bot.use(createForwardMiddleware(bot.telegram, ALLOWED_FORWARD_FROM, log, logError));
+
 bot.start((ctx) => {
-  ctx.reply("Bot chuyển tiếp tin nhắn từ nhóm trong input.json đến các nhóm trong output.txt.");
+  ctx.reply(
+    "👋 Xin chào! Bot tự động đọc tin vượt chuẩn và thay 'lo' → 'b'.\n" +
+    "Bot đang chạy ở chế độ tự động."
+  );
 });
 
 bot.help((ctx) => {
-  ctx.reply("Tin nhắn văn bản của người khác trong nhóm input.json được đếm và chuyển tiếp nguyên bản đến output.txt. Tin media bị bỏ qua.");
+  ctx.reply(
+    "📖 Bot tự động:\n" +
+    "• Đọc tin từ bot vượt chuẩn trong group\n" +
+    "• Thay 'lo' → 'b'\n" +
+    "• Gửi kết quả về tất cả group trong output.txt\n\n" +
+    "Bạn cũng có thể forward tin nhắn trực tiếp cho bot."
+  );
 });
 
-// ─── Forward text messages from input groups using bot account ───
-const inputGroups = loadInputGroups();
-const inputGroupNames = new Map();
-const messageCounters = {};
-
-for (const key in inputGroups) {
-  const group = inputGroups[key];
-  if (!group?.ID) continue;
-  const groupId = group.ID.toString();
-  inputGroupNames.set(groupId, group.name || key);
-  messageCounters[groupId] = 0;
-  log("👁️  [InputListener]", `Monitoring input group "${group.name || key}" (ID: ${groupId})`);
-}
-
-const forwardQueue = [];
-let isProcessingQueue = false;
-
-async function processForwardQueue() {
-  if (isProcessingQueue) return;
-  isProcessingQueue = true;
-  while (forwardQueue.length > 0) {
-    const task = forwardQueue.shift();
-    try {
-      await task();
-    } catch (e) {
-      logError("❌ [Queue]", "Error processing queued task:", e.message);
-    }
-  }
-  isProcessingQueue = false;
-}
-
+// Handle text — groups directly, DMs only if forwarded from allowed users
 bot.on("text", async (ctx) => {
-  if (ctx.chat?.type !== "group" && ctx.chat?.type !== "supergroup") return;
+  const chatType = ctx.chat?.type;
+  const msg = ctx.message;
+  const text = msg.text || "";
+  const who = userLabel(msg.from);
+  const where = chatLabel(ctx.chat);
 
-  const chatId = ctx.chat.id.toString();
-  if (!inputGroupNames.has(chatId)) return;
+  // ── Private / DM ──
+  if (chatType === "private") {
+    const senderId = msg.from?.id;
+    const forwardFrom =
+      msg.forward_origin?.type === "user" ? msg.forward_origin.sender_user?.id :
+        msg.forward_from?.id ?? null;
+    const forwardName = msg.forward_from
+      ? userLabel(msg.forward_from)
+      : (msg.forward_origin?.sender_user ? userLabel(msg.forward_origin.sender_user) : null);
 
-  const senderId = ctx.from?.id;
-  if (!senderId || senderId === ctx.botInfo?.id || ALLOWED_FORWARD_FROM.includes(senderId)) return;
+    const isAllowed =
+      ALLOWED_FORWARD_FROM.includes(senderId) ||
+      (forwardFrom && ALLOWED_FORWARD_FROM.includes(forwardFrom));
 
-  const counter = ++messageCounters[chatId];
-  const messageId = ctx.message.message_id;
-  const groupName = inputGroupNames.get(chatId);
-  const senderName = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(" ") || senderId;
+    log("📩 [Bot/DM]", `Incoming message from ${who}` +
+      (forwardFrom ? ` | forwarded from: ${forwardName || forwardFrom}` : "") +
+      ` | preview: ${preview(text)}`);
 
-  log("📩 [InputListener]", `Text message #${counter} from ${senderName} in "${groupName}" (${chatId}) | preview: ${preview(ctx.message.text)}`);
+    if (!isAllowed) {
+      log("⛔ [Bot/DM]", `REJECTED — user ${who} not in ALLOWED_FORWARD_FROM (forward: ${forwardFrom || "none"})`);
+      return;
+    }
 
-  try {
-    await ctx.reply(`${counter}`, { reply_to_message_id: messageId });
-    log("📤 [InputListener]", `Bot replied "${counter}" to msg ${messageId} in group ${chatId}`);
-  } catch (e) {
-    logError("❌ [InputListener]", `Failed to reply counter in group ${chatId}:`, e.message);
-    try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to reply counter in group " + chatId + ": " + e.message); } catch (_) { }
+    log("✅ [Bot/DM]", `AUTHORIZED — processing message from ${who}`);
+
+    // For DMs: try with header first, then treat as raw data
+    const result = processMessage(text);
+    if (result) {
+      const html = `<pre>${escapeHtml(result)}</pre>`;
+      ctx.reply(html, { parse_mode: "HTML" });
+      log("📤 [Bot/DM]", `Replied to ${who} | result: ${preview(result)}`);
+    } else {
+      log("⏭️  [Bot/DM]", `No header found in message from ${who} — skipped`);
+    }
+    return;
   }
 
-  forwardQueue.push(async () => {
-    const chatIds = loadChatIds();
-    log("📬 [Queue]", `Processing direct forward for message #${counter} (queue size: ${forwardQueue.length})`);
-    for (let i = 0; i < chatIds.length; i++) {
-      const targetChatId = chatIds[i];
-      try {
-        await bot.telegram.forwardMessage(targetChatId, chatId, messageId);
-        log("📤 [InputListener]", `Bot forwarded original message #${counter} to chat ${targetChatId}`);
-      } catch (e) {
-        logError("❌ [InputListener]", `Failed to forward to chat ${targetChatId}: ${e.message}`);
-        try { await bot.telegram.sendMessage(ERROR_CHAT_ID, "❌ Failed to forward msg #" + counter + " to chat " + targetChatId + ": " + e.message); } catch (_) { }
-      }
-      if (i < chatIds.length - 1) {
-        const delay = Math.floor(Math.random() * 3 + 3) * 1000;
-        log("⏳ [InputListener]", `Waiting ${delay / 1000}s before next send...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
+  // ── Groups / Supergroups ──
+  if (chatType === "group" || chatType === "supergroup") {
+    const senderId = msg.from?.id;
+    const hasHeader = text.includes(HEADER_PATTERN);
+    log("📩 [Bot/Group]", `Message from ${who} in ${where} | has_header: ${hasHeader} | preview: ${preview(text)}`);
+
+    // Only process messages from the target bot
+    if (senderId !== TARGET_BOT_ID) {
+      return;
     }
+
+    const result = processMessage(text);
+    if (result) {
+      const html = `<pre>${escapeHtml(result)}</pre>`;
+      ctx.reply(html, { parse_mode: "HTML" });
+      log("📤 [Bot/Group]", `Replied to msg ${msg.message_id} in ${where} | triggered by: ${who} | result: ${preview(result)}`);
+    }
+  }
+});
+
+// ─── GramJS Userbot (auto-read from group) ────────────────────────
+async function startUserbot() {
+  const session = new StringSession(SESSION_STRING);
+  const client = new TelegramClient(session, API_ID, API_HASH, {
+    connectionRetries: Infinity,
+    retryDelay: 3000,
+    autoReconnect: true,
+    timeout: 30,
+    useWSS: false,
   });
 
-  processForwardQueue();
-});
+  log("🔑 [Userbot]", "Logging in to Telegram user account...");
+  await client.start({
+    phoneNumber: async () => await input.text("📱 Enter your phone number: "),
+    password: async () => await input.text("🔒 Enter 2FA password (if any): "),
+    phoneCode: async () => await input.text("📟 Enter the code you received: "),
+    onError: (err) => logError("❌ [Userbot]", "Login error:", err),
+  });
 
-log("👁️  [InputListener]", `Listening to ${inputGroupNames.size} input group(s)`);
+  const savedSession = client.session.save();
+  log("✅ [Userbot]", "Logged in successfully!");
+  log("🔑 [Userbot]", `SESSION_STRING=${savedSession}`);
 
-// Reset counters at midnight, 16:35, and 17:35 VN time
-let lastResetKey = "";
-setInterval(() => {
-  const now = new Date();
-  const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  const vnHour = vnTime.getUTCHours();
-  const vnMinute = vnTime.getUTCMinutes();
-  const resetKey = vnTime.getUTCFullYear() + "-" + vnTime.getUTCMonth() + "-" + vnTime.getUTCDate() + "_" + vnHour + ":" + vnMinute;
-  if ((vnHour === 0 && vnMinute === 0) || (vnHour === 16 && vnMinute === 35) || (vnHour === 17 && vnMinute === 35)) {
-    if (lastResetKey !== resetKey) {
-      lastResetKey = resetKey;
-      for (const gid in messageCounters) {
-        messageCounters[gid] = 0;
+  // Store client reference globally for crash notification system
+  _userbotClient = client;
+
+  // Listen for new messages
+  client.addEventHandler(async (event) => {
+    try {
+      const message = event.message;
+      if (!message || !message.text) return;
+
+      const senderId = message.senderId?.toString();
+      const chatId = message.chatId || message.peerId;
+
+      if (senderId !== TARGET_BOT_ID.toString()) return;
+
+      // Detect "Cú pháp không hợp lệ" error from bot → notify ERROR_CHAT_ID
+      if (message.text.includes("Cú pháp không hợp lệ")) {
+        log("⚠️  [Userbot]", `Bot reported invalid syntax in chat ${chatId}`);
+        try {
+          await bot.telegram.sendMessage(ERROR_CHAT_ID, "⚠️ Bot báo lỗi cú pháp:\n\n" + message.text);
+        } catch (notifyErr) {
+          logError("❌ [Userbot]", "Failed to notify ERROR_CHAT_ID about syntax error:", notifyErr.message);
+        }
+        return;
       }
-      log("🔄 [InputListener]", `Counters reset at ${vnHour}:${vnMinute} VN time`);
+
+      // Only care about messages with the header
+      if (!message.text.includes(HEADER_PATTERN)) return;
+
+      log("📩 [Userbot]", `Header message detected from bot ${TARGET_BOT_ID} in chat ${chatId} | preview: ${preview(message.text)}`);
+
+      let result = processMessage(message.text);
+      if (!result) return;
+
+      // Replace 'th' → 'hue' (Thừa Thiên Huế shorthand)
+      result = result.replace(/\bth\b/gi, "hue");
+
+      log("⚙️  [Userbot]", `Processed result: ${preview(result)}`);
+
+      // Only reply in allowed chats from output.txt
+      const allowedChats = loadChatIds();
+      const botChatId = Number(chatId); // Convert BigInt from GramJS to Number for Bot API
+      if (!allowedChats.includes(chatId.toString()) && !allowedChats.includes(botChatId.toString())) {
+        log("⛔ [Userbot]", `REJECTED — chat ${chatId} (botId: ${botChatId}) not in output.txt (allowed: [${allowedChats.join(", ")}])`);
+        return;
+      }
+      try {
+        const html = `<pre>${escapeHtml(result)}</pre>`;
+        await bot.telegram.sendMessage(botChatId, html, { parse_mode: "HTML" });
+        log("📤 [Bot via Userbot]", `✅ Replied to msg ${message.id} in chat ${botChatId} | result: ${preview(result)}`);
+      } catch (e) {
+        logError("❌ [Userbot]", `Failed to reply in chat ${chatId}:`, e.message);
+      }
+    } catch (err) {
+      logError("❌ [Userbot]", "Error handling message:", err.message, err.stack);
     }
-  }
-}, 30000); // check every 30s
+  }, new NewMessage({ fromUsers: [TARGET_BOT_ID] }));
+
+  log("👁️  [Userbot]", `Monitoring for messages from bot ${TARGET_BOT_ID}`);
+
+
+  // Keep-alive: ping Telegram periodically to prevent TIMEOUT
+  setInterval(async () => {
+    try {
+      if (client.connected) {
+        await client.invoke(new (require("telegram/tl").Api.Ping)({ pingId: BigInt(Math.floor(Math.random() * 1e15)) }));
+      } else {
+        log("🔄 [Userbot]", "Reconnecting...");
+        await client.connect();
+        log("✅ [Userbot]", "Reconnected!");
+      }
+    } catch (err) {
+      logError("⚠️  [Userbot]", "Keep-alive/reconnect error:", err.message);
+      try {
+        await client.connect();
+        log("✅ [Userbot]", "Reconnected after keep-alive failure!");
+      } catch (reconnectErr) {
+        logError("❌ [Userbot]", "Reconnect failed:", reconnectErr.message);
+      }
+    }
+  }, 60000); // ping every 60 seconds
+}
 
 // ─── Launch everything ────────────────────────────────────────────
 async function main() {
@@ -962,13 +1054,30 @@ async function main() {
     }
   }, 15 * 60 * 1000); // every 15 minutes
   log("📋 [Boot]", `ALLOWED_FORWARD_FROM: [${ALLOWED_FORWARD_FROM.join(", ")}]`);
+  log("📋 [Boot]", `TARGET_BOT_ID: ${TARGET_BOT_ID}`);
+
+  if (API_ID && API_HASH) {
+    try {
+      await startUserbot();
+    } catch (err) {
+      logError("❌ [Boot]", "Userbot failed to start:", err.message);
+      log("⚠️  [Boot]", "Bot will still work for forwarded/pasted messages.");
+    }
+  } else {
+    log("⚠️  [Boot]", "No API_ID/API_HASH in .env — userbot disabled.");
+  }
 }
 
 main();
 
 // ─── Crash Notification System ───────────────────────────────────
+// Global reference to the GramJS client so crash handlers can send urgent messages
+let _userbotClient = null;
+
 /**
  * Send urgent crash notification to ERROR_CHAT_ID before the process dies.
+ * Tries userbot (GramJS) first — more reliable during crashes.
+ * Falls back to Telegraf bot API if userbot is unavailable.
  * Waits up to 3 seconds for the message to be delivered.
  */
 async function sendCrashNotification(reason, error) {
@@ -984,15 +1093,28 @@ async function sendCrashNotification(reason, error) {
     `📛 Error: ${errorMsg}\n\n` +
     `⚠️ Bot is shutting down NOW. Auto-restart should kick in.`;
 
-  const notification =
+  const promises = [];
+
+  // Try 1: Send via userbot (GramJS) — works even when Telegraf is dead
+  if (_userbotClient && _userbotClient.connected) {
+    promises.push(
+      _userbotClient.sendMessage(ERROR_CHAT_ID.toString(), { message: urgentMessage })
+        .then(() => log("🚨 [Crash]", "Urgent message sent via userbot"))
+        .catch((e) => logError("❌ [Crash]", "Userbot send failed:", e.message))
+    );
+  }
+
+  // Try 2: Send via Telegraf bot API — backup
+  promises.push(
     bot.telegram.sendMessage(ERROR_CHAT_ID, urgentMessage)
       .then(() => log("🚨 [Crash]", "Urgent message sent via Telegraf"))
-      .catch((e) => logError("❌ [Crash]", "Telegraf send failed:", e.message));
+      .catch((e) => logError("❌ [Crash]", "Telegraf send failed:", e.message))
+  );
 
-  // Wait up to 3 seconds for delivery
+  // Wait up to 3 seconds for at least one message to go through
   try {
     await Promise.race([
-      notification,
+      Promise.allSettled(promises),
       new Promise((resolve) => setTimeout(resolve, 3000)),
     ]);
   } catch (_) {

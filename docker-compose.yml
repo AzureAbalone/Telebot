@@ -8,8 +8,10 @@ services:
     ports:
       - "${PORT:-7777}:${PORT:-7777}"
     volumes:
-      # Persist output.txt so branch-specific chat ID survives rebuilds
+      # Persist chat IDs and forwarding routes across rebuilds
       - ./output.txt:/app/output.txt
+      - ./finput.txt:/app/finput.txt
+      - ./foutput.txt:/app/foutput.txt
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-7777}/health"]
       interval: 30s
