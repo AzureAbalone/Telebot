@@ -13,7 +13,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # 3. Application code: changes most often → last layers
 COPY index.js input.json ./
-COPY chat.txt ./
+COPY output.txt ./
 
 # 4. Ensure non-root ownership
 RUN chown -R telebot:telebot /app
