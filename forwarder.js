@@ -3,8 +3,6 @@ const path = require("path");
 
 const INPUT_FILE = path.join(__dirname, "finput.txt");
 const OUTPUT_FILE = path.join(__dirname, "foutput.txt");
-const STATE_DIR = process.env.FORWARDER_STATE_DIR || path.join(__dirname, "state");
-const STATE_FILE = path.join(STATE_DIR, "finput-counts.json");
 
 function loadLines(file) {
   return fs.readFileSync(file, "utf8")
@@ -19,29 +17,7 @@ function matchesSourceId(configuredId, sourceId, chatType) {
     configuredId === `-${sourceId.slice(4)}`;
 }
 
-function vietnamDate() {
-  return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-function nextCount(sourceId, senderId) {
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-  let state = { date: vietnamDate(), counts: {} };
-  if (fs.existsSync(STATE_FILE)) {
-    state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-  }
-  const today = vietnamDate();
-  if (state.date !== today) state = { date: today, counts: {} };
-  const key = `${sourceId}:${senderId}`;
-  const count = (state.counts[key] || 0) + 1;
-  state.counts[key] = count;
-  const tempFile = `${STATE_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(state));
-  fs.renameSync(tempFile, STATE_FILE);
-  return count;
-}
-
-function createForwardMiddleware(telegram, excludedUserIds, log, logError) {
-  let countQueue = Promise.resolve();
+function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSourceText) {
   return (ctx, next) => {
     const message = ctx.message;
     const sourceId = ctx.chat?.id?.toString();
@@ -54,27 +30,38 @@ function createForwardMiddleware(telegram, excludedUserIds, log, logError) {
         const sourceLine = inputLines.findIndex((id) =>
           id && !id.startsWith("#") && matchesSourceId(id, sourceId, ctx.chat?.type));
         if (sourceLine !== -1) {
-          if (excludedUserIds.includes(senderId)) {
-            // Serialize owner counts; leave the main bot handler free to run.
-            countQueue = countQueue.then(async () => {
-              const count = nextCount(sourceId, senderId);
-              await ctx.reply(String(count), { reply_to_message_id: message.message_id });
-              log("📤 [Forwarder]", `Replied ${count} to owner msg ${message.message_id} in ${sourceId}`);
-            }).catch((err) => {
-              logError("❌ [Forwarder]", `Failed to count/reply to msg ${message.message_id}:`, err.message);
-            });
-          } else {
+          try {
+            onSourceText(ctx, sourceId);
+          } catch (err) {
+            logError("❌ [Forwarder]", `Could not queue count for msg ${message.message_id}:`, err.message);
+          }
+
+          if (!excludedUserIds.includes(senderId)) {
             const targetId = loadLines(OUTPUT_FILE)[sourceLine];
             if (!targetId || !/^-?\d+$/.test(targetId) ||
                 matchesSourceId(targetId, sourceId, ctx.chat?.type)) {
               log("⏭️  [Forwarder]", `No valid foutput.txt line ${sourceLine + 1} for finput.txt line ${sourceLine + 1}; skipped msg ${message.message_id} from ${sourceId}`);
             } else {
               void (async () => {
+                let attemptedTarget = targetId;
                 try {
                   await telegram.forwardMessage(targetId, sourceId, message.message_id);
                   log("📤 [Forwarder]", `Forwarded msg ${message.message_id} from ${sourceId} to ${targetId}`);
                 } catch (err) {
-                  logError("❌ [Forwarder]", `Failed to forward msg ${message.message_id} to ${targetId}:`, err.message);
+                  const fallbackId = targetId.startsWith("-") && !targetId.startsWith("-100")
+                    ? `-100${targetId.slice(1)}` : null;
+                  if (fallbackId && /chat not found/i.test(err.message || "")) {
+                    attemptedTarget = fallbackId;
+                    try {
+                      const chat = await telegram.getChat(fallbackId);
+                      await telegram.forwardMessage(fallbackId, sourceId, message.message_id);
+                      log("📤 [Forwarder]", `Forwarded msg ${message.message_id} to ${fallbackId} (${chat.title || "untitled"}; foutput.txt: ${targetId})`);
+                      return;
+                    } catch (fallbackError) {
+                      err = fallbackError;
+                    }
+                  }
+                  logError("❌ [Forwarder]", `Failed to forward msg ${message.message_id} to ${targetId} (last tried ${attemptedTarget}):`, err.message, "Check bot membership and Bot API chat ID.");
                 }
               })();
             }

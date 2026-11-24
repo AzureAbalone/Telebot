@@ -80,6 +80,8 @@ const SESSION_STRING = process.env.SESSION_STRING || "";
 
 const CHAT_FILE = path.join(__dirname, "output.txt");
 const INPUT_FILE = path.join(__dirname, "input.json");
+const COUNTER_PATH = path.join(__dirname, "finput-counts.json");
+const COUNTER_FILE = fs.existsSync(COUNTER_PATH) ? fs.realpathSync(COUNTER_PATH) : COUNTER_PATH;
 const PORT = process.env.PORT || 3000;
 
 // ─── Health check server (for cron jobs) ───────────────────────────
@@ -846,7 +848,44 @@ function processMessage(text) {
 }
 
 // ─── Telegraf Bot Commands ────────────────────────────────────────
-bot.use(createForwardMiddleware(bot.telegram, ALLOWED_FORWARD_FROM, log, logError));
+function vietnamDateForMessage(message) {
+  const timestamp = Number.isFinite(message.date) ? message.date * 1000 : Date.now();
+  return new Date(timestamp + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function loadCounterState() {
+  if (!fs.existsSync(COUNTER_FILE)) return { days: {} };
+  const state = JSON.parse(fs.readFileSync(COUNTER_FILE, "utf8"));
+  if (state.days && typeof state.days === "object") return state;
+  // Preserve counts written by the previous single-day format.
+  return { days: state.date ? { [state.date]: state.counts || {} } : {} };
+}
+
+let countReplyQueue = Promise.resolve();
+function queueCountReply(ctx, sourceId) {
+  if (ctx.from?.is_bot) return;
+  const messageId = ctx.message.message_id;
+  const date = vietnamDateForMessage(ctx.message);
+
+  // Serialize replies so a slow send cannot reorder following count replies.
+  countReplyQueue = countReplyQueue.then(async () => {
+    const state = loadCounterState();
+    const counts = state.days[date] || {};
+    const count = (counts[sourceId] || 0) + 1;
+    counts[sourceId] = count;
+    state.days[date] = counts;
+
+    const tempFile = `${COUNTER_FILE}.${process.pid}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(state));
+    fs.renameSync(tempFile, COUNTER_FILE);
+    await ctx.reply(String(count));
+    log("📤 [Counter]", `Sent ${count} after msg ${messageId} in ${sourceId} (${date})`);
+  }).catch((err) => {
+    logError("❌ [Counter]", `Failed to count/reply to msg ${messageId} in ${sourceId}:`, err.message);
+  });
+}
+
+bot.use(createForwardMiddleware(bot.telegram, ALLOWED_FORWARD_FROM, log, logError, queueCountReply));
 
 bot.start((ctx) => {
   ctx.reply(

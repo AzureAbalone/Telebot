@@ -8,4 +8,5 @@ docker-compose.yml
 .gitignore
 reports/
 .gemini/
-state/
+finput-counts.json
+finput-counts.json.*.tmp
