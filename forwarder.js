@@ -18,6 +18,17 @@ function matchesSourceId(configuredId, sourceId, chatType) {
     configuredId === `-${sourceId.slice(4)}`;
 }
 
+function vietnamCounterPeriod(message) {
+  const timestamp = Number.isFinite(message.date) ? message.date * 1000 : Date.now();
+  const vnTime = new Date(timestamp + 7 * 60 * 60 * 1000);
+  const date = vnTime.toISOString().slice(0, 10);
+  const minute = vnTime.getUTCHours() * 60 + vnTime.getUTCMinutes();
+  const start = minute >= 17 * 60 + 18 ? "17:18"
+    : minute >= 16 * 60 + 18 ? "16:18"
+      : minute >= 12 * 60 ? "12:00" : "00:00";
+  return `${date}T${start}`;
+}
+
 function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSourceText) {
   return (ctx, next) => {
     const message = ctx.message;
@@ -35,7 +46,12 @@ function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSou
           id && !id.startsWith("#") && matchesSourceId(id, sourceId, ctx.chat?.type));
         if (sourceLine !== -1) {
           try {
-            onSourceText(ctx, sourceId);
+            const period = vietnamCounterPeriod(message);
+            // Existing index.js counter resets at midnight. Use separate keys
+            // for later VN reset windows without changing its reply flow.
+            const counterKey = period.endsWith("T00:00")
+              ? sourceId : `${sourceId}@${period.slice(-5)}`;
+            onSourceText(ctx, counterKey);
           } catch (err) {
             logError("❌ [Forwarder]", `Could not queue count for msg ${message.message_id}:`, err.message);
           }
