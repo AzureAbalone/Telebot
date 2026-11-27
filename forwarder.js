@@ -18,9 +18,20 @@ function matchesSourceId(configuredId, sourceId, chatType) {
     configuredId === `-${sourceId.slice(4)}`;
 }
 
-function vietnamCounterPeriod(message) {
+function vietnamTimeForMessage(message) {
   const timestamp = Number.isFinite(message.date) ? message.date * 1000 : Date.now();
-  const vnTime = new Date(timestamp + 7 * 60 * 60 * 1000);
+  return new Date(timestamp + 7 * 60 * 60 * 1000);
+}
+
+function isQuietTime(message) {
+  const vnTime = vietnamTimeForMessage(message);
+  const hour = vnTime.getUTCHours();
+  const minute = vnTime.getUTCMinutes();
+  return hour >= 16 && hour <= 18 && minute >= 14 && minute < 24;
+}
+
+function vietnamCounterPeriod(message) {
+  const vnTime = vietnamTimeForMessage(message);
   const date = vnTime.toISOString().slice(0, 10);
   const minute = vnTime.getUTCHours() * 60 + vnTime.getUTCMinutes();
   const start = minute >= 17 * 60 + 18 ? "17:18"
@@ -45,6 +56,10 @@ function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSou
         const sourceLine = inputLines.findIndex((id) =>
           id && !id.startsWith("#") && matchesSourceId(id, sourceId, ctx.chat?.type));
         if (sourceLine !== -1) {
+          if (isQuietTime(message)) {
+            log("🔇 [Forwarder]", `Quiet period; skipped msg ${message.message_id} from ${sourceId}`);
+            return next();
+          }
           try {
             const period = vietnamCounterPeriod(message);
             // Existing index.js counter resets at midnight. Use separate keys
