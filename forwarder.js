@@ -40,11 +40,32 @@ function vietnamCounterPeriod(message) {
   return `${date}T${start}`;
 }
 
-function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSourceText) {
+function createForwardMiddleware(telegram, excludedUserIds, log, logError, onSourceText, onSourceReset) {
   return (ctx, next) => {
     const message = ctx.message;
     const sourceId = ctx.chat?.id?.toString();
     const senderId = ctx.from?.id;
+
+    const resetCommand = message?.text?.match(/^\/reset(?:@([\w]+))?\s*$/i);
+    if (resetCommand && (!resetCommand[1] ||
+        resetCommand[1].toLowerCase() === ctx.botInfo?.username?.toLowerCase())) {
+      if ((ctx.chat?.type === "group" || ctx.chat?.type === "supergroup") &&
+          sourceId && senderId && !ctx.from?.is_bot) {
+        try {
+          const configured = loadLines(INPUT_FILE).some((id) =>
+            id && !id.startsWith("#") && matchesSourceId(id, sourceId, ctx.chat.type));
+          if (configured) {
+            const period = vietnamCounterPeriod(message);
+            const counterKey = period.endsWith("T00:00")
+              ? sourceId : `${sourceId}@${period.slice(-5)}`;
+            if (typeof onSourceReset === "function") onSourceReset(ctx, counterKey);
+          }
+        } catch (err) {
+          logError("❌ [Counter]", `Could not queue reset for ${sourceId}:`, err.message);
+        }
+      }
+      return;
+    }
 
     // Text-only forwarding. Media captions and messages without a sender are ignored.
     if (message?.text && sourceId && senderId && senderId !== ctx.botInfo?.id) {

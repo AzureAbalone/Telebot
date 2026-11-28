@@ -885,7 +885,25 @@ function queueCountReply(ctx, sourceId) {
   });
 }
 
-bot.use(createForwardMiddleware(bot.telegram, ALLOWED_FORWARD_FROM, log, logError, queueCountReply));
+function queueCountReset(ctx, sourceId) {
+  const date = vietnamDateForMessage(ctx.message);
+  countReplyQueue = countReplyQueue.then(async () => {
+    const state = loadCounterState();
+    const counts = state.days[date] || {};
+    counts[sourceId] = 1;
+    state.days[date] = counts;
+
+    const tempFile = `${COUNTER_FILE}.${process.pid}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(state));
+    fs.renameSync(tempFile, COUNTER_FILE);
+    await ctx.reply("1");
+    log("📤 [Counter]", `Reset ${sourceId} (${date})`);
+  }).catch((err) => {
+    logError("❌ [Counter]", `Failed to reset ${sourceId}:`, err.message);
+  });
+}
+
+bot.use(createForwardMiddleware(bot.telegram, ALLOWED_FORWARD_FROM, log, logError, queueCountReply, queueCountReset));
 
 bot.start((ctx) => {
   ctx.reply(
@@ -899,7 +917,8 @@ bot.help((ctx) => {
     "📖 Bot tự động:\n" +
     "• Đọc tin từ bot vượt chuẩn trong group\n" +
     "• Thay 'lo' → 'b'\n" +
-    "• Gửi kết quả về tất cả group trong output.txt\n\n" +
+    "• Gửi kết quả về tất cả group trong output.txt\n" +
+    "• Dùng /reset trong group để bắt đầu lại bộ đếm từ 1\n\n" +
     "Bạn cũng có thể forward tin nhắn trực tiếp cho bot."
   );
 });
